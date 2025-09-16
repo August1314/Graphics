@@ -21,7 +21,7 @@ class ToolBar(QToolBar):
         self.action_point = QAction("点", self)
         self.action_line = QAction("直线", self)
         self.action_rect = QAction("矩形", self)
-        self.action_ellipse = QAction("椭圆", self)
+        self.action_ellipse = QAction("圆", self)
         self.action_polygon = QAction("多边形", self)
 
         for act, name in (

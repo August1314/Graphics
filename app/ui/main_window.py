@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QKeySequence, QCursor
 from PySide6.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QDockWidget, QWidget, QVBoxLayout, QPushButton
 
 from app.ui.canvas_view import CanvasView
@@ -41,6 +41,7 @@ class MainWindow(QMainWindow):
         file_menu = menu.addMenu("文件")
         settings_menu = menu.addMenu("设置")
         edit_menu = menu.addMenu("编辑")
+        debug_menu = menu.addMenu("调试")
 
         action_open = QAction("打开...", self)
         action_open.setShortcut("Ctrl+O")
@@ -68,10 +69,26 @@ class MainWindow(QMainWindow):
         # 撤销/重做
         action_undo = self.undo_stack.createUndoAction(self, "撤销")
         action_redo = self.undo_stack.createRedoAction(self, "重做")
-        action_undo.setShortcut("Ctrl+Z")
-        action_redo.setShortcut("Ctrl+Y")
+        action_undo.setShortcut(QKeySequence.Undo)
+        action_redo.setShortcut(QKeySequence.Redo)
         edit_menu.addAction(action_undo)
         edit_menu.addAction(action_redo)
+
+        # 复制/粘贴（Cmd/Ctrl 自动适配）
+        action_copy = QAction("复制", self)
+        action_copy.setShortcut(QKeySequence.Copy)
+        action_copy.triggered.connect(self._on_copy)
+        edit_menu.addAction(action_copy)
+
+        action_paste = QAction("粘贴", self)
+        action_paste.setShortcut(QKeySequence.Paste)
+        action_paste.triggered.connect(self._on_paste)
+        edit_menu.addAction(action_paste)
+
+        # 调试：查看剪贴板文本
+        action_clip = QAction("查看剪贴板文本", self)
+        action_clip.triggered.connect(self._on_show_clipboard)
+        debug_menu.addAction(action_clip)
 
     def _init_status_bar(self) -> None:
         self.statusBar().showMessage("就绪")
@@ -125,6 +142,8 @@ class MainWindow(QMainWindow):
         self.view.moveCommitted.connect(self._on_move_committed)
         self.view.deleteRequested.connect(self._on_delete_requested)
         self.view.selectionGeometryChanged.connect(self._on_scene_selection_changed)
+        self.view.copyCompleted.connect(self._on_copy_completed)
+        self.view.pasteCompleted.connect(self._on_paste_completed)
 
         # 删除快捷键
         self._delete_action = QAction("删除", self)
@@ -298,6 +317,45 @@ class MainWindow(QMainWindow):
         # 改为走撤销命令
         for item in list(self.scene.selectedItems()):
             self.undo_stack.push(DeleteShapeCommand(self.scene, item))
+
+    def _on_copy(self) -> None:
+        # 若无选中，尝试根据鼠标位置命中一个图元后再复制
+        if not self.scene.selectedItems():
+            pos_view = self.view.mapFromGlobal(QCursor.pos())
+            hit = self.view.itemAt(pos_view)
+            if hit is not None:
+                self.scene.clearSelection()
+                hit.setSelected(True)
+        self.view.copy_selected()
+
+    def _on_paste(self) -> None:
+        # 进入“点击画布以粘贴”模式，由用户点击决定位置
+        self.statusBar().showMessage("请在画布上点击以粘贴…")
+        self.view.begin_paste_from_clipboard()
+
+    def _on_copy_completed(self, ok: bool) -> None:
+        if ok:
+            self.statusBar().showMessage("复制成功", 3000)
+        else:
+            self.statusBar().showMessage("复制失败：无支持的圆形", 3000)
+            QMessageBox.warning(self, "复制失败", "请确保选中或鼠标在圆/椭圆上再执行复制。")
+
+    def _on_paste_completed(self, ok: bool) -> None:
+        self.statusBar().showMessage("粘贴成功" if ok else "粘贴失败：剪贴板无有效数据", 3000)
+
+    def _on_show_clipboard(self) -> None:
+        # 展示当前剪贴板的纯文本与可用 MIME 格式
+        try:
+            from PySide6.QtWidgets import QApplication
+            cb = QApplication.clipboard()
+            md = cb.mimeData()
+            text = cb.text() or "<空>"
+            formats = ", ".join(md.formats()) if md is not None else "<无>"
+            preview = text if len(text) < 500 else text[:500] + "…"
+            QMessageBox.information(self, "剪贴板内容",
+                                    f"MIME 格式: {formats}\n\n文本预览:\n{preview}")
+        except Exception as e:
+            QMessageBox.warning(self, "读取失败", str(e))
 
     # ---- 撤销/重做接入 ----
     def _on_shape_committed(self, item) -> None:
