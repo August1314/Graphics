@@ -39,6 +39,14 @@ class CanvasScene(QGraphicsScene):
             item.setData(self._DATA_BASE_COLOR, p.color())
             item.setData(self._DATA_BASE_WIDTH, p.widthF())
 
+    # 公共方法：将当前样式设为基础样式
+    def update_base_style(self, item: QGraphicsItem) -> None:
+        self._tag_base_style(item)
+
+    # 公共方法：根据当前选择状态，刷新高亮/还原
+    def refresh_selection_styles(self) -> None:
+        self._on_selection_changed()
+
     def _restore_style(self, item: QGraphicsItem) -> None:
         pen = getattr(item, "pen", None)
         set_pen = getattr(item, "setPen", None)
@@ -70,10 +78,9 @@ class CanvasScene(QGraphicsScene):
         for item in self.items():
             if not (item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsSelectable):
                 continue
-            # 首次遇到可选项时，若未缓存基础样式则缓存一次
-            if item.data(self._DATA_BASE_COLOR) is None or item.data(self._DATA_BASE_WIDTH) is None:
-                self._tag_base_style(item)
+            # 每次选中时，以当前样式为基础样式
             if item.isSelected():
+                self._tag_base_style(item)
                 self._highlight_style(item)
             else:
                 self._restore_style(item)

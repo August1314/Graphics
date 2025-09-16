@@ -21,6 +21,9 @@ class PropertyPanel(QWidget):
     strokeWidthChanged = Signal(int)
     fillColorChanged = Signal(QColor)
     opacityChanged = Signal(int)
+    # 直线
+    lineP1Changed = Signal(float, float)
+    lineP2Changed = Signal(float, float)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -45,6 +48,20 @@ class PropertyPanel(QWidget):
         self.spin_r.setDecimals(1)
         self.spin_r.valueChanged.connect(lambda v: self.radiusChanged.emit(float(v)))
         layout.addRow("半径", self.spin_r)
+
+        # 直线端点
+        self.spin_x1 = QDoubleSpinBox(); self.spin_x1.setRange(-1e6, 1e6); self.spin_x1.setDecimals(1)
+        self.spin_y1 = QDoubleSpinBox(); self.spin_y1.setRange(-1e6, 1e6); self.spin_y1.setDecimals(1)
+        self.spin_x2 = QDoubleSpinBox(); self.spin_x2.setRange(-1e6, 1e6); self.spin_x2.setDecimals(1)
+        self.spin_y2 = QDoubleSpinBox(); self.spin_y2.setRange(-1e6, 1e6); self.spin_y2.setDecimals(1)
+        self.spin_x1.valueChanged.connect(lambda v: self.lineP1Changed.emit(v, self.spin_y1.value()))
+        self.spin_y1.valueChanged.connect(lambda v: self.lineP1Changed.emit(self.spin_x1.value(), v))
+        self.spin_x2.valueChanged.connect(lambda v: self.lineP2Changed.emit(v, self.spin_y2.value()))
+        self.spin_y2.valueChanged.connect(lambda v: self.lineP2Changed.emit(self.spin_x2.value(), v))
+        layout.addRow("起点X", self.spin_x1)
+        layout.addRow("起点Y", self.spin_y1)
+        layout.addRow("终点X", self.spin_x2)
+        layout.addRow("终点Y", self.spin_y2)
 
         # 描边颜色
         self.btn_stroke = QPushButton("选择颜色")
@@ -119,8 +136,37 @@ class PropertyPanel(QWidget):
         self.spin_width.blockSignals(False)
         self.slider_opacity.blockSignals(False)
 
+    def set_from_point(self, x: float, y: float, r: float, stroke: QColor, width: float, fill: QColor, opacity_pct: int) -> None:
+        self.set_from_circle(x, y, r, stroke, width, fill, opacity_pct)
+
+    def set_from_line(self, x1: float, y1: float, x2: float, y2: float, stroke: QColor, width: float, opacity_pct: int, pen_style_index: int) -> None:
+        # 仅填直线相关控件
+        for w in (self.spin_cx, self.spin_cy, self.spin_r, self.btn_fill):
+            w.blockSignals(True)
+        self.spin_x1.blockSignals(True); self.spin_y1.blockSignals(True)
+        self.spin_x2.blockSignals(True); self.spin_y2.blockSignals(True)
+        self.spin_width.blockSignals(True); self.slider_opacity.blockSignals(True)
+        self.combo_dash.blockSignals(True)
+
+        self.spin_x1.setValue(x1); self.spin_y1.setValue(y1)
+        self.spin_x2.setValue(x2); self.spin_y2.setValue(y2)
+        self.spin_width.setValue(int(round(width)))
+        self.slider_opacity.setValue(opacity_pct)
+        self.combo_dash.setCurrentIndex(pen_style_index)
+        self._stroke_color = QColor(stroke)
+        self._update_button_color()
+
+        self.spin_x1.blockSignals(False); self.spin_y1.blockSignals(False)
+        self.spin_x2.blockSignals(False); self.spin_y2.blockSignals(False)
+        self.spin_width.blockSignals(False); self.slider_opacity.blockSignals(False)
+        self.combo_dash.blockSignals(False)
+
     def set_enabled(self, enabled: bool) -> None:
-        for w in (self.spin_cx, self.spin_cy, self.spin_r, self.btn_stroke, self.spin_width, self.combo_dash, self.btn_fill, self.slider_opacity):
+        for w in (
+            self.spin_cx, self.spin_cy, self.spin_r, self.btn_stroke,
+            self.spin_width, self.combo_dash, self.btn_fill, self.slider_opacity,
+            self.spin_x1, self.spin_y1, self.spin_x2, self.spin_y2,
+        ):
             w.setEnabled(enabled)
 
 

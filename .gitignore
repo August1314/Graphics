@@ -42,3 +42,43 @@
 
 #Mac
 *.Ds_store
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.venv/
+pip-wheel-metadata/
+dist/
+build/
+site/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.pyc
+
+# IDE/Editor
+.idea/
+.vscode/
+*.code-workspace
+
+# Logs/Temp
+*.log
+logs/
+tmp/
+*.swp
+*.swo
+
+# Qt / PySide
+*.qmlc
+*.jsc
+*.qrc.depends
+*.pro.user*
+*.qmake.stash

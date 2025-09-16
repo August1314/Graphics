@@ -13,6 +13,8 @@ from app.core.commands.add_shape_cmd import AddShapeCommand
 from app.core.commands.delete_shape_cmd import DeleteShapeCommand
 from app.core.commands.move_shape_cmd import MoveShapeCommand
 from app.core.commands.update_style_cmd import UpdateStyleCommand
+from app.core.shapes.point_item import PointItem
+from app.core.shapes.line_item import LineItem
 
 
 class MainWindow(QMainWindow):
@@ -130,6 +132,8 @@ class MainWindow(QMainWindow):
         pp.set_enabled(False)
         pp.centerChanged.connect(self._on_center_changed)
         pp.radiusChanged.connect(self._on_radius_changed)
+        pp.lineP1Changed.connect(self._on_line_p1_changed)
+        pp.lineP2Changed.connect(self._on_line_p2_changed)
         pp.strokeColorChanged.connect(self._on_stroke_color_changed)
         pp.strokeWidthChanged.connect(self._on_stroke_width_changed)
         pp.fillColorChanged.connect(self._on_fill_color_changed)
@@ -196,28 +200,76 @@ class MainWindow(QMainWindow):
             return item
         return None
 
+    def _get_selected_point(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, PointItem):
+            return item
+        return None
+
+    def _get_selected_line(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, LineItem):
+            return item
+        return None
+
     def _on_scene_selection_changed(self) -> None:
         circle = self._get_selected_circle()
-        if circle is None:
-            self.property_panel.set_enabled(False)
+        if circle is not None:
+            cx, cy, r = circle.center_radius()
+            p = circle.pen()
+            stroke = p.color(); width = p.widthF()
+            fill = circle.brush().color()
+            opacity_pct = int(round(circle.opacity() * 100))
+            self.property_panel.set_from_circle(cx, cy, r, stroke, width, fill, opacity_pct)
+            from PySide6.QtCore import Qt as _Qt
+            self.property_panel.combo_dash.blockSignals(True)
+            self.property_panel.combo_dash.setCurrentIndex(0 if p.style() == _Qt.PenStyle.SolidLine else 1)
+            self.property_panel.combo_dash.blockSignals(False)
+            self.property_panel.set_enabled(True)
             return
-        cx, cy, r = circle.center_radius()
-        p = circle.pen()
-        stroke = p.color()
-        width = p.widthF()
-        fill = circle.brush().color()
-        opacity_pct = int(round(circle.opacity() * 100))
-        self.property_panel.set_from_circle(cx, cy, r, stroke, width, fill, opacity_pct)
-        # 同步线型
-        from PySide6.QtCore import Qt as _Qt
-        self.property_panel.combo_dash.blockSignals(True)
-        self.property_panel.combo_dash.setCurrentIndex(0 if p.style() == _Qt.PenStyle.SolidLine else 1)
-        self.property_panel.combo_dash.blockSignals(False)
-        self.property_panel.set_enabled(True)
+        point = self._get_selected_point()
+        if point is not None:
+            # PointItem: 使用外接圆半径（宽度/2）
+            rect = point.rect(); r = rect.width() / 2.0
+            pos = point.pos(); p = point.pen()
+            stroke = p.color(); width = p.widthF()
+            fill = point.brush().color()
+            opacity_pct = int(round(point.opacity() * 100))
+            self.property_panel.set_from_point(pos.x(), pos.y(), r, stroke, width, fill, opacity_pct)
+            self.property_panel.set_enabled(True)
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            ln = line.line(); p = line.pen()
+            x1, y1, x2, y2 = ln.x1(), ln.y1(), ln.x2(), ln.y2()
+            stroke = p.color(); width = p.widthF()
+            opacity_pct = int(round(line.opacity() * 100))
+            from PySide6.QtCore import Qt as _Qt
+            pen_idx = 0 if p.style() == _Qt.PenStyle.SolidLine else 1
+            self.property_panel.set_from_line(x1, y1, x2, y2, stroke, width, opacity_pct, pen_idx)
+            self.property_panel.set_enabled(True)
+            return
+        self.property_panel.set_enabled(False)
 
     def _on_center_changed(self, cx: float, cy: float) -> None:
         circle = self._get_selected_circle()
         if circle is None:
+            # Point
+            point = self._get_selected_point()
+            if point is None:
+                return
+            ox, oy = point.pos().x(), point.pos().y()
+            def apply():
+                point.setPos(cx, cy)
+            def revert():
+                point.setPos(ox, oy)
+            self.undo_stack.push(UpdateStyleCommand.make("移动点", apply, revert))
             return
         ox, oy, r = circle.center_radius()
         def apply():
@@ -229,6 +281,17 @@ class MainWindow(QMainWindow):
     def _on_radius_changed(self, r: float) -> None:
         circle = self._get_selected_circle()
         if circle is None:
+            # Point 半径
+            point = self._get_selected_point()
+            if point is None:
+                return
+            rect = point.rect(); old_r = rect.width() / 2.0
+            nr = max(0.1, r)
+            def apply():
+                point.setRect(-nr, -nr, 2*nr, 2*nr)
+            def revert():
+                point.setRect(-old_r, -old_r, 2*old_r, 2*old_r)
+            self.undo_stack.push(UpdateStyleCommand.make("修改点半径", apply, revert))
             return
         cx, cy, old_r = circle.center_radius()
         nr = max(0.0, r)
@@ -239,84 +302,187 @@ class MainWindow(QMainWindow):
         self.undo_stack.push(UpdateStyleCommand.make("修改半径", apply, revert))
 
     def _on_stroke_color_changed(self, color) -> None:
+        # Circle or Point or Line
         circle = self._get_selected_circle()
-        if circle is None:
+        if circle is not None:
+            pen = circle.pen(); old = pen.color()
+            def apply():
+                p = circle.pen(); p.setColor(color); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            def revert():
+                p = circle.pen(); p.setColor(old); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改描边颜色", apply, revert))
             return
-        pen = circle.pen()
-        old = pen.color()
-        def apply():
-            p = circle.pen()
-            p.setColor(color)
-            circle.setPen(p)
-        def revert():
-            p = circle.pen()
-            p.setColor(old)
-            circle.setPen(p)
-        self.undo_stack.push(UpdateStyleCommand.make("修改描边颜色", apply, revert))
+        point = self._get_selected_point()
+        if point is not None:
+            pen = point.pen(); old = pen.color()
+            def apply():
+                p = point.pen(); p.setColor(color); point.setPen(p)
+                self.scene.update_base_style(point)
+            def revert():
+                p = point.pen(); p.setColor(old); point.setPen(p)
+                self.scene.update_base_style(point)
+            self.undo_stack.push(UpdateStyleCommand.make("修改描边颜色", apply, revert))
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            pen = line.pen(); old = pen.color()
+            def apply():
+                p = line.pen(); p.setColor(color); line.setPen(p)
+                self.scene.update_base_style(line)
+            def revert():
+                p = line.pen(); p.setColor(old); line.setPen(p)
+                self.scene.update_base_style(line)
+            self.undo_stack.push(UpdateStyleCommand.make("修改描边颜色", apply, revert))
 
     def _on_stroke_width_changed(self, width: int) -> None:
-        circle = self._get_selected_circle()
-        if circle is None:
-            return
-        pen = circle.pen()
-        old = pen.widthF()
         nw = max(0.1, float(width))
-        def apply():
-            p = circle.pen()
-            p.setWidthF(nw)
-            circle.setPen(p)
-        def revert():
-            p = circle.pen()
-            p.setWidthF(old)
-            circle.setPen(p)
-        self.undo_stack.push(UpdateStyleCommand.make("修改线宽", apply, revert))
+        circle = self._get_selected_circle()
+        if circle is not None:
+            old = circle.pen().widthF()
+            def apply():
+                p = circle.pen(); p.setWidthF(nw); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            def revert():
+                p = circle.pen(); p.setWidthF(old); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线宽", apply, revert))
+            return
+        point = self._get_selected_point()
+        if point is not None:
+            old = point.pen().widthF()
+            def apply():
+                p = point.pen(); p.setWidthF(nw); point.setPen(p)
+                self.scene.update_base_style(point)
+            def revert():
+                p = point.pen(); p.setWidthF(old); point.setPen(p)
+                self.scene.update_base_style(point)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线宽", apply, revert))
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            old = line.pen().widthF()
+            def apply():
+                p = line.pen(); p.setWidthF(nw); line.setPen(p)
+                self.scene.update_base_style(line)
+            def revert():
+                p = line.pen(); p.setWidthF(old); line.setPen(p)
+                self.scene.update_base_style(line)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线宽", apply, revert))
 
     def _on_fill_color_changed(self, color) -> None:
-        circle = self._get_selected_circle()
-        if circle is None:
-            return
+        # 仅 Circle/Point 支持填充
         from PySide6.QtGui import QBrush
-        old = circle.brush().color()
-        def apply():
-            circle.setBrush(QBrush(color))
-        def revert():
-            circle.setBrush(QBrush(old))
-        self.undo_stack.push(UpdateStyleCommand.make("修改填充颜色", apply, revert))
+        circle = self._get_selected_circle()
+        if circle is not None:
+            old = circle.brush().color()
+            def apply():
+                circle.setBrush(QBrush(color))
+                self.scene.update_base_style(circle)
+            def revert():
+                circle.setBrush(QBrush(old))
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改填充颜色", apply, revert))
+            return
+        point = self._get_selected_point()
+        if point is not None:
+            old = point.brush().color()
+            def apply():
+                point.setBrush(QBrush(color))
+                self.scene.update_base_style(point)
+            def revert():
+                point.setBrush(QBrush(old))
+                self.scene.update_base_style(point)
+            self.undo_stack.push(UpdateStyleCommand.make("修改填充颜色", apply, revert))
 
     def _on_opacity_changed(self, pct: int) -> None:
-        circle = self._get_selected_circle()
-        if circle is None:
-            return
-        old = circle.opacity()
         new = max(0.0, min(1.0, pct / 100.0))
-        def apply():
-            circle.setOpacity(new)
-        def revert():
-            circle.setOpacity(old)
-        self.undo_stack.push(UpdateStyleCommand.make("修改不透明度", apply, revert))
+        circle = self._get_selected_circle()
+        if circle is not None:
+            old = circle.opacity()
+            def apply():
+                circle.setOpacity(new)
+                self.scene.update_base_style(circle)
+            def revert():
+                circle.setOpacity(old)
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改不透明度", apply, revert))
+            return
+        point = self._get_selected_point()
+        if point is not None:
+            old = point.opacity()
+            def apply():
+                point.setOpacity(new)
+                self.scene.update_base_style(point)
+            def revert():
+                point.setOpacity(old)
+                self.scene.update_base_style(point)
+            self.undo_stack.push(UpdateStyleCommand.make("修改不透明度", apply, revert))
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            old = line.opacity()
+            def apply():
+                line.setOpacity(new)
+                self.scene.update_base_style(line)
+            def revert():
+                line.setOpacity(old)
+                self.scene.update_base_style(line)
+            self.undo_stack.push(UpdateStyleCommand.make("修改不透明度", apply, revert))
 
     def _on_dash_style_changed(self, idx: int) -> None:
-        circle = self._get_selected_circle()
-        if circle is None:
-            return
-        pen = circle.pen()
         from PySide6.QtCore import Qt as _Qt
-        old = pen.style()
         new = _Qt.PenStyle.SolidLine if idx == 0 else _Qt.PenStyle.DashLine
-        def apply():
-            p = circle.pen()
-            p.setStyle(new)
-            circle.setPen(p)
-        def revert():
-            p = circle.pen()
-            p.setStyle(old)
-            circle.setPen(p)
-        self.undo_stack.push(UpdateStyleCommand.make("修改线型", apply, revert))
+        circle = self._get_selected_circle()
+        if circle is not None:
+            old = circle.pen().style()
+            def apply():
+                p = circle.pen(); p.setStyle(new); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            def revert():
+                p = circle.pen(); p.setStyle(old); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线型", apply, revert))
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            old = line.pen().style()
+            def apply():
+                p = line.pen(); p.setStyle(new); line.setPen(p)
+                self.scene.update_base_style(line)
+            def revert():
+                p = line.pen(); p.setStyle(old); line.setPen(p)
+                self.scene.update_base_style(line)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线型", apply, revert))
 
     def _on_delete_selected(self) -> None:
         # 改为走撤销命令
         for item in list(self.scene.selectedItems()):
             self.undo_stack.push(DeleteShapeCommand(self.scene, item))
+
+    # 直线端点
+    def _on_line_p1_changed(self, x1: float, y1: float) -> None:
+        line = self._get_selected_line()
+        if line is None:
+            return
+        ln = line.line(); old = (ln.x1(), ln.y1(), ln.x2(), ln.y2())
+        def apply():
+            line.set_points(x1, y1, old[2], old[3])
+        def revert():
+            line.set_points(old[0], old[1], old[2], old[3])
+        self.undo_stack.push(UpdateStyleCommand.make("修改直线起点", apply, revert))
+
+    def _on_line_p2_changed(self, x2: float, y2: float) -> None:
+        line = self._get_selected_line()
+        if line is None:
+            return
+        ln = line.line(); old = (ln.x1(), ln.y1(), ln.x2(), ln.y2())
+        def apply():
+            line.set_points(old[0], old[1], x2, y2)
+        def revert():
+            line.set_points(old[0], old[1], old[2], old[3])
+        self.undo_stack.push(UpdateStyleCommand.make("修改直线终点", apply, revert))
 
     def _on_copy(self) -> None:
         # 若无选中，尝试根据鼠标位置命中一个图元后再复制
