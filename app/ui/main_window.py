@@ -221,38 +221,21 @@ class MainWindow(QMainWindow):
     def _on_scene_selection_changed(self) -> None:
         circle = self._get_selected_circle()
         if circle is not None:
-            cx, cy, r = circle.center_radius()
-            p = circle.pen()
-            stroke = p.color(); width = p.widthF()
-            fill = circle.brush().color()
-            opacity_pct = int(round(circle.opacity() * 100))
-            self.property_panel.set_from_circle(cx, cy, r, stroke, width, fill, opacity_pct)
-            from PySide6.QtCore import Qt as _Qt
-            self.property_panel.combo_dash.blockSignals(True)
-            self.property_panel.combo_dash.setCurrentIndex(0 if p.style() == _Qt.PenStyle.SolidLine else 1)
-            self.property_panel.combo_dash.blockSignals(False)
+            self.property_panel.set_mode("circle")
+            # 动态装配组件
+            self.property_panel.build_for(circle, "circle", self.scene, self.undo_stack)
             self.property_panel.set_enabled(True)
             return
         point = self._get_selected_point()
         if point is not None:
-            # PointItem: 使用外接圆半径（宽度/2）
-            rect = point.rect(); r = rect.width() / 2.0
-            pos = point.pos(); p = point.pen()
-            stroke = p.color(); width = p.widthF()
-            fill = point.brush().color()
-            opacity_pct = int(round(point.opacity() * 100))
-            self.property_panel.set_from_point(pos.x(), pos.y(), r, stroke, width, fill, opacity_pct)
+            self.property_panel.set_mode("point")
+            self.property_panel.build_for(point, "point", self.scene, self.undo_stack)
             self.property_panel.set_enabled(True)
             return
         line = self._get_selected_line()
         if line is not None:
-            ln = line.line(); p = line.pen()
-            x1, y1, x2, y2 = ln.x1(), ln.y1(), ln.x2(), ln.y2()
-            stroke = p.color(); width = p.widthF()
-            opacity_pct = int(round(line.opacity() * 100))
-            from PySide6.QtCore import Qt as _Qt
-            pen_idx = 0 if p.style() == _Qt.PenStyle.SolidLine else 1
-            self.property_panel.set_from_line(x1, y1, x2, y2, stroke, width, opacity_pct, pen_idx)
+            self.property_panel.set_mode("line")
+            self.property_panel.build_for(line, "line", self.scene, self.undo_stack)
             self.property_panel.set_enabled(True)
             return
         self.property_panel.set_enabled(False)

@@ -34,6 +34,8 @@ class CanvasView(QGraphicsView):
         self._line_tool = LineTool()
         # 提交后自动选中新建的图元
         self._circle_tool.on_committed(self._auto_select_item)
+        self._point_tool.on_committed(self._auto_select_item)
+        self._line_tool.on_committed(self._auto_select_item)
         self._dragged_item = None
         self._drag_start_pos: QPointF | None = None
         self._pending_paste_payload: dict | None = None

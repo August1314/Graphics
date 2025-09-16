@@ -10,20 +10,7 @@ class CanvasScene(QGraphicsScene):
         super().__init__(parent)
         # 设定一个默认场景大小
         self.setSceneRect(QRectF(0, 0, 1200, 800))
-        # 放置两个示例图元，验证渲染与交互
-        rect = QGraphicsRectItem(100, 120, 200, 100)
-        rect.setPen(QPen(QColor("#00AA00"), 3))
-        rect.setBrush(QBrush(QColor("#FF0000")))
-        rect.setFlags(rect.flags() | rect.GraphicsItemFlag.ItemIsMovable | rect.GraphicsItemFlag.ItemIsSelectable)
-        self._tag_base_style(rect)
-        self.addItem(rect)
-
-        circle = QGraphicsEllipseItem(400, 200, 120, 120)
-        circle.setPen(QPen(QColor("#0066cc"), 2))
-        circle.setBrush(QBrush(QColor(255, 255, 255, 0)))
-        circle.setFlags(circle.flags() | circle.GraphicsItemFlag.ItemIsMovable | circle.GraphicsItemFlag.ItemIsSelectable)
-        self._tag_base_style(circle)
-        self.addItem(circle)
+        # 初始不放置任何示例图元，由用户通过工具创建
 
         # 选择变化监听
         self.selectionChanged.connect(self._on_selection_changed)
