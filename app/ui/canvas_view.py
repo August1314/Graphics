@@ -10,6 +10,8 @@ from app.core.tools.base_tool import BaseTool
 from app.core.tools.circle_tool import CircleTool
 from app.core.tools.point_tool import PointTool
 from app.core.tools.line_tool import LineTool
+from app.core.tools.rect_tool import RectTool
+from app.core.tools.polygon_tool import PolygonTool
 
 
 class CanvasView(QGraphicsView):
@@ -32,10 +34,14 @@ class CanvasView(QGraphicsView):
         self._circle_tool = CircleTool()
         self._point_tool = PointTool()
         self._line_tool = LineTool()
+        self._rect_tool = RectTool()
+        self._polygon_tool = PolygonTool()
         # 提交后自动选中新建的图元
         self._circle_tool.on_committed(self._auto_select_item)
         self._point_tool.on_committed(self._auto_select_item)
         self._line_tool.on_committed(self._auto_select_item)
+        self._rect_tool.on_committed(self._auto_select_item)
+        self._polygon_tool.on_committed(self._auto_select_item)
         self._dragged_item = None
         self._drag_start_pos: QPointF | None = None
         self._pending_paste_payload: dict | None = None
@@ -61,10 +67,15 @@ class CanvasView(QGraphicsView):
             self.setCursor(Qt.ArrowCursor)
             event.accept()
             return
-        # 仅在左键点击空白区域且有绘制工具时，启动绘制
+        # 仅在左键点击且有绘制工具时，启动绘制
         if event.button() == Qt.LeftButton and self._tool is not None:
             top_item = self.itemAt(event.pos())
-            if top_item is None:  # 空白区域
+            # 多边形：激活期间允许在图元上继续点选；其他工具仍要求空白区域
+            allow_press = (
+                (self._tool is self._polygon_tool and getattr(self._tool, "is_active", lambda: False)())
+                or top_item is None
+            )
+            if allow_press:
                 # 开始绘制会话时，禁用橡皮框拖拽以避免抢占事件
                 self.setDragMode(QGraphicsView.NoDrag)
                 scene_pos = self.mapToScene(event.pos())
@@ -127,6 +138,10 @@ class CanvasView(QGraphicsView):
             self._tool = self._point_tool
         elif name == "line":
             self._tool = self._line_tool
+        elif name == "rect":
+            self._tool = self._rect_tool
+        elif name == "polygon":
+            self._tool = self._polygon_tool
         else:
             self._tool = None
 
@@ -212,6 +227,12 @@ class CanvasView(QGraphicsView):
         return None
 
     def keyPressEvent(self, event):  # type: ignore[override]
+        if event.key() == Qt.Key_Escape and self._tool is self._polygon_tool and getattr(self._tool, "is_active", lambda: False)():
+            # 取消正在创建的多边形
+            self._polygon_tool.cancel(self.scene())
+            self.setDragMode(QGraphicsView.RubberBandDrag)
+            event.accept()
+            return
         if event.key() == Qt.Key_Space and not self._space_held:
             self._space_held = True
             self.setCursor(Qt.OpenHandCursor)
@@ -229,6 +250,13 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
         super().keyReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):  # type: ignore[override]
+        if self._tool is not None and isinstance(self._tool, PolygonTool):
+            self._polygon_tool.double_click(self.scene())
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def export_png(self, path: str) -> bool:
         rect: QRectF = self.sceneRect()

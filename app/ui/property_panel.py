@@ -224,10 +224,31 @@ class PropertyPanel(QWidget):
                     comp = Comp(item, scene, undo_stack)
                     comp.sync_from_item()
                     vbox.addWidget(comp)
+            elif shape == "rect":
+                from app.ui.props.rect_geom import RectGeomProperty
+                from app.ui.props.stroke import StrokeProperty
+                from app.ui.props.fill_opacity import FillAndOpacityProperty
+                for Comp in (RectGeomProperty, StrokeProperty, FillAndOpacityProperty):
+                    comp = Comp(item, scene, undo_stack)
+                    comp.sync_from_item()
+                    vbox.addWidget(comp)
+            elif shape == "polygon":
+                from app.ui.props.stroke import StrokeProperty
+                from app.ui.props.fill_opacity import FillAndOpacityProperty
+                for Comp in (StrokeProperty, FillAndOpacityProperty):
+                    comp = Comp(item, scene, undo_stack)
+                    comp.sync_from_item()
+                    vbox.addWidget(comp)
         except Exception:
             pass
 
-        title = "直线" if shape == "line" else ("点" if shape == "point" else "圆")
+        title = (
+            "直线" if shape == "line" else
+            "点" if shape == "point" else
+            "矩形" if shape == "rect" else
+            "多边形" if shape == "polygon" else
+            "圆"
+        )
         self.tabs.addTab(page, title)
 
 

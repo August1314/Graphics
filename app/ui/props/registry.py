@@ -18,6 +18,14 @@ class PropertyRegistry:
             return [
                 "lineP1", "lineP2", "strokeColor", "strokeWidth", "dash", "opacity",
             ]
+        if shape == "rect":
+            return [
+                "rectGeom", "strokeColor", "strokeWidth", "dash", "fillColor", "opacity",
+            ]
+        if shape == "polygon":
+            return [
+                "strokeColor", "strokeWidth", "dash", "fillColor", "opacity",
+            ]
         return []
 
 

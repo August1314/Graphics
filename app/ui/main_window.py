@@ -15,6 +15,8 @@ from app.core.commands.move_shape_cmd import MoveShapeCommand
 from app.core.commands.update_style_cmd import UpdateStyleCommand
 from app.core.shapes.point_item import PointItem
 from app.core.shapes.line_item import LineItem
+from app.core.shapes.rect_item import RectItem
+from app.core.shapes.polygon_item import PolygonItem
 
 
 class MainWindow(QMainWindow):
@@ -218,6 +220,24 @@ class MainWindow(QMainWindow):
             return item
         return None
 
+    def _get_selected_rect(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, RectItem):
+            return item
+        return None
+
+    def _get_selected_polygon(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, PolygonItem):
+            return item
+        return None
+
     def _on_scene_selection_changed(self) -> None:
         circle = self._get_selected_circle()
         if circle is not None:
@@ -236,6 +256,17 @@ class MainWindow(QMainWindow):
         if line is not None:
             self.property_panel.set_mode("line")
             self.property_panel.build_for(line, "line", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        # 矩形
+        rect = self._get_selected_rect()
+        if rect is not None:
+            self.property_panel.build_for(rect, "rect", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        poly = self._get_selected_polygon()
+        if poly is not None:
+            self.property_panel.build_for(poly, "polygon", self.scene, self.undo_stack)
             self.property_panel.set_enabled(True)
             return
         self.property_panel.set_enabled(False)
