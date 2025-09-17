@@ -35,7 +35,9 @@ class ToolBar(QToolBar):
         self.action_brush_marker = QAction("马克笔", self); self.action_brush_marker.setCheckable(True); self.action_brush_marker.setData("brush_marker"); self._group.addAction(self.action_brush_marker)
         self.action_brush_calligraphy = QAction("书法笔", self); self.action_brush_calligraphy.setCheckable(True); self.action_brush_calligraphy.setData("brush_calligraphy"); self._group.addAction(self.action_brush_calligraphy)
         self.action_brush_spray = QAction("喷枪", self); self.action_brush_spray.setCheckable(True); self.action_brush_spray.setData("brush_spray"); self._group.addAction(self.action_brush_spray)
-        self.action_brush_eraser = QAction("橡皮擦", self); self.action_brush_eraser.setCheckable(True); self.action_brush_eraser.setData("brush_eraser"); self._group.addAction(self.action_brush_eraser)
+        
+        # 橡皮擦动作
+        self.action_eraser = QAction("橡皮擦", self); self.action_eraser.setCheckable(True); self.action_eraser.setData("eraser"); self._group.addAction(self.action_eraser)
 
         # 下拉按钮“图形”
         self.shape_button = QToolButton(self)
@@ -53,10 +55,13 @@ class ToolBar(QToolBar):
         self.brush_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.brush_menu = QMenu(self.brush_button)
         for a in (self.action_brush_pen, self.action_brush_marker, self.action_brush_calligraphy, 
-                  self.action_brush_spray, self.action_brush_eraser):
+                  self.action_brush_spray):
             self.brush_menu.addAction(a)
         self.brush_button.setMenu(self.brush_menu)
         self.addWidget(self.brush_button)
+        
+        # 橡皮擦按钮
+        self.addAction(self.action_eraser)
 
         # 默认选择工具
         self.action_select.setChecked(True)
@@ -74,6 +79,9 @@ class ToolBar(QToolBar):
         elif name.startswith("brush_"):
             self.brush_button.setText(action.text())
             self.shape_button.setText("图形")
+        elif name == "eraser":
+            self.shape_button.setText("图形")
+            self.brush_button.setText("画笔")
         else:
             self.shape_button.setText("图形")
             self.brush_button.setText("画笔")

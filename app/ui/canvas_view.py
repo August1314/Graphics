@@ -13,6 +13,7 @@ from app.core.tools.line_tool import LineTool
 from app.core.tools.rect_tool import RectTool
 from app.core.tools.polygon_tool import PolygonTool
 from app.core.tools.brush_tool import BrushTool
+from app.core.tools.eraser_tool import EraserTool
 
 
 class CanvasView(QGraphicsView):
@@ -38,6 +39,7 @@ class CanvasView(QGraphicsView):
         self._rect_tool = RectTool()
         self._polygon_tool = PolygonTool()
         self._brush_tool = BrushTool()
+        self._eraser_tool = EraserTool()
         # 提交后自动选中新建的图元
         self._circle_tool.on_committed(self._auto_select_item)
         self._point_tool.on_committed(self._auto_select_item)
@@ -45,6 +47,7 @@ class CanvasView(QGraphicsView):
         self._rect_tool.on_committed(self._auto_select_item)
         self._polygon_tool.on_committed(self._auto_select_item)
         self._brush_tool.on_committed(self._auto_select_item)
+        self._eraser_tool.on_committed(self._on_eraser_completed)
         self._dragged_item = None
         self._drag_start_pos: QPointF | None = None
         self._pending_paste_payload: dict | None = None
@@ -150,6 +153,8 @@ class CanvasView(QGraphicsView):
             brush_type = name.replace("brush_", "")
             self._brush_tool.set_brush_type(brush_type)
             self._tool = self._brush_tool
+        elif name == "eraser":
+            self._tool = self._eraser_tool
         else:
             self._tool = None
 
@@ -158,6 +163,16 @@ class CanvasView(QGraphicsView):
         self.scene().clearSelection()
         item.setSelected(True)
         self.shapeCommitted.emit(item)
+    
+    def _on_eraser_completed(self, erased_items):
+        """橡皮擦完成回调"""
+        # 橡皮擦完成后，清理场景并发出信号
+        for item in erased_items:
+            if item.scene():
+                item.scene().removeItem(item)
+        # 发出删除信号，用于撤销/重做（逐个发出）
+        for item in erased_items:
+            self.deleteRequested.emit(item)
 
     def _create_item_from_payload(self, data: dict, at_scene_pos: QPointF | None = None) -> None:
         from app.core.shapes.circle_item import CircleItem

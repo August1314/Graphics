@@ -18,6 +18,7 @@ from app.core.shapes.line_item import LineItem
 from app.core.shapes.rect_item import RectItem
 from app.core.shapes.polygon_item import PolygonItem
 from app.core.shapes.brush_path_item import BrushPathItem
+from app.core.tools.eraser_tool import EraserTool
 
 
 class MainWindow(QMainWindow):
@@ -174,6 +175,15 @@ class MainWindow(QMainWindow):
     def _on_tool_changed(self, name: str) -> None:
         self.statusBar().showMessage(f"当前工具：{name}")
         self.view.set_tool(name)
+        
+        # 如果切换到橡皮擦工具，显示橡皮擦属性面板
+        if name == "eraser":
+            eraser_tool = self._get_selected_eraser_tool()
+            if eraser_tool is not None:
+                self.property_panel.build_for(eraser_tool, "eraser", self.scene, self.undo_stack)
+                self.property_panel.set_enabled(True)
+                return
+        
         # 切换工具时处理选择记忆/清理
         if name != "select":
             # 记录当前选择并清除
@@ -247,6 +257,12 @@ class MainWindow(QMainWindow):
         if isinstance(item, BrushPathItem):
             return item
         return None
+    
+    def _get_selected_eraser_tool(self):
+        # 检查当前工具是否为橡皮擦工具
+        if hasattr(self.view, '_tool') and isinstance(self.view._tool, EraserTool):
+            return self.view._tool
+        return None
 
     def _on_scene_selection_changed(self) -> None:
         circle = self._get_selected_circle()
@@ -282,6 +298,11 @@ class MainWindow(QMainWindow):
         brush_path = self._get_selected_brush_path()
         if brush_path is not None:
             self.property_panel.build_for(brush_path, "brush_path", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        eraser_tool = self._get_selected_eraser_tool()
+        if eraser_tool is not None:
+            self.property_panel.build_for(eraser_tool, "eraser", self.scene, self.undo_stack)
             self.property_panel.set_enabled(True)
             return
         self.property_panel.set_enabled(False)

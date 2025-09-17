@@ -247,6 +247,13 @@ class PropertyPanel(QWidget):
                            BrushSmoothingProperty, BrushEditProperty):
                     comp = Comp(item, scene, undo_stack)
                     vbox.addWidget(comp)
+            elif shape == "eraser":
+                from app.ui.props.eraser_properties import (EraserModeProperty, EraserSizeProperty, 
+                                                           EraserPreviewProperty, EraserAdvancedProperty)
+                for Comp in (EraserModeProperty, EraserSizeProperty, EraserPreviewProperty, 
+                           EraserAdvancedProperty):
+                    comp = Comp(item, scene, undo_stack)
+                    vbox.addWidget(comp)
         except Exception:
             pass
 
@@ -256,6 +263,7 @@ class PropertyPanel(QWidget):
             "矩形" if shape == "rect" else
             "多边形" if shape == "polygon" else
             "画笔路径" if shape == "brush_path" else
+            "橡皮擦" if shape == "eraser" else
             "圆"
         )
         self.tabs.addTab(page, title)

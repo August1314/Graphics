@@ -31,6 +31,11 @@ class PropertyRegistry:
                 "brushType", "strokeColor", "strokeWidth", "dash", "opacity", 
                 "smoothing", "pathEdit"
             ]
+        if shape == "eraser":
+            return [
+                "eraserMode", "eraserSize", "previewColor", "previewOpacity", 
+                "smoothing", "minDistance"
+            ]
         return []
 
 
