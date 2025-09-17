@@ -241,9 +241,9 @@ class PropertyPanel(QWidget):
                     vbox.addWidget(comp)
             elif shape == "brush_path":
                 from app.ui.props.brush_properties import (BrushTypeProperty, BrushStrokeProperty, 
-                                                          BrushFillProperty, BrushSmoothingProperty, 
+                                                          BrushOpacityProperty, BrushSmoothingProperty, 
                                                           BrushEditProperty)
-                for Comp in (BrushTypeProperty, BrushStrokeProperty, BrushFillProperty, 
+                for Comp in (BrushTypeProperty, BrushStrokeProperty, BrushOpacityProperty, 
                            BrushSmoothingProperty, BrushEditProperty):
                     comp = Comp(item, scene, undo_stack)
                     vbox.addWidget(comp)

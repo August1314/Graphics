@@ -19,9 +19,9 @@ class BrushPathItem(QGraphicsPathItem):
             self.GraphicsItemFlag.ItemSendsGeometryChanges
         )
         
-        # 默认样式
+        # 默认样式 - 画笔路径只显示描边，不显示填充
         self.setPen(QPen(QColor("#000000"), 3.0))
-        self.setBrush(QBrush(QColor("#000000")))
+        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
         self.setOpacity(1.0)
         
         # 路径数据
@@ -247,6 +247,8 @@ class BrushPathItem(QGraphicsPathItem):
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         
         self.setPen(pen)
+        # 确保画笔路径始终不显示填充
+        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
     
     def _douglas_peucker(self, points: List[QPointF], tolerance: float) -> List[QPointF]:
         """道格拉斯-普克算法简化路径"""

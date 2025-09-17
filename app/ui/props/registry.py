@@ -28,7 +28,7 @@ class PropertyRegistry:
             ]
         if shape == "brush_path":
             return [
-                "brushType", "strokeColor", "strokeWidth", "dash", "fillColor", "opacity", 
+                "brushType", "strokeColor", "strokeWidth", "dash", "opacity", 
                 "smoothing", "pathEdit"
             ]
         return []

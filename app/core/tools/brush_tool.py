@@ -151,7 +151,8 @@ class BrushTool(BaseTool):
             pen.setColor(pen.color())
             pen.setWidthF(pen.widthF())
             self._current_item.setPen(pen)
-            self._current_item.setBrush(self._brush)
+            # 画笔路径应该只显示描边，不显示填充
+            self._current_item.setBrush(QBrush(Qt.BrushStyle.NoBrush))
             self._current_item.setOpacity(self._opacity)
     
     def _distance_to_last_point(self, point: QPointF) -> float:

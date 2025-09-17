@@ -156,8 +156,8 @@ class BrushStrokeProperty(PropertyComponent):
             self.scene.update_base_style(self._item)
 
 
-class BrushFillProperty(PropertyComponent):
-    """画笔填充属性组件"""
+class BrushOpacityProperty(PropertyComponent):
+    """画笔透明度属性组件"""
     
     def __init__(self, item, scene, undo_stack) -> None:
         super().__init__(item, scene, undo_stack)
@@ -167,18 +167,6 @@ class BrushFillProperty(PropertyComponent):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 填充颜色
-        fill_layout = QHBoxLayout()
-        fill_label = QLabel("填充颜色:")
-        self.fill_button = QPushButton()
-        self.fill_button.setFixedSize(40, 25)
-        self._update_fill_button()
-        self.fill_button.clicked.connect(self._on_fill_color_clicked)
-        
-        fill_layout.addWidget(fill_label)
-        fill_layout.addWidget(self.fill_button)
-        fill_layout.addStretch()
         
         # 透明度
         opacity_layout = QHBoxLayout()
@@ -195,24 +183,9 @@ class BrushFillProperty(PropertyComponent):
         opacity_layout.addWidget(self.opacity_slider)
         opacity_layout.addWidget(self.opacity_label)
         
-        layout.addLayout(fill_layout)
         layout.addLayout(opacity_layout)
         
         return widget
-    
-    def _update_fill_button(self) -> None:
-        color = self._item.brush().color()
-        self.fill_button.setStyleSheet(f"background-color: {color.name()}; border: 1px solid #ccc;")
-    
-    def _on_fill_color_clicked(self) -> None:
-        current_color = self._item.brush().color()
-        color = QColorDialog.getColor(current_color, self.fill_button, "选择填充颜色")
-        if color.isValid():
-            brush = self._item.brush()
-            brush.setColor(color)
-            self._item.setBrush(brush)
-            self._update_fill_button()
-            self.scene.update_base_style(self._item)
     
     def _on_opacity_changed(self, value: int) -> None:
         opacity = value / 100.0
