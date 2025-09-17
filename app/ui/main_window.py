@@ -17,6 +17,7 @@ from app.core.shapes.point_item import PointItem
 from app.core.shapes.line_item import LineItem
 from app.core.shapes.rect_item import RectItem
 from app.core.shapes.polygon_item import PolygonItem
+from app.core.shapes.brush_path_item import BrushPathItem
 
 
 class MainWindow(QMainWindow):
@@ -237,6 +238,15 @@ class MainWindow(QMainWindow):
         if isinstance(item, PolygonItem):
             return item
         return None
+    
+    def _get_selected_brush_path(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, BrushPathItem):
+            return item
+        return None
 
     def _on_scene_selection_changed(self) -> None:
         circle = self._get_selected_circle()
@@ -267,6 +277,11 @@ class MainWindow(QMainWindow):
         poly = self._get_selected_polygon()
         if poly is not None:
             self.property_panel.build_for(poly, "polygon", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        brush_path = self._get_selected_brush_path()
+        if brush_path is not None:
+            self.property_panel.build_for(brush_path, "brush_path", self.scene, self.undo_stack)
             self.property_panel.set_enabled(True)
             return
         self.property_panel.set_enabled(False)

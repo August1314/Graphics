@@ -12,6 +12,7 @@ from app.core.tools.point_tool import PointTool
 from app.core.tools.line_tool import LineTool
 from app.core.tools.rect_tool import RectTool
 from app.core.tools.polygon_tool import PolygonTool
+from app.core.tools.brush_tool import BrushTool
 
 
 class CanvasView(QGraphicsView):
@@ -36,12 +37,14 @@ class CanvasView(QGraphicsView):
         self._line_tool = LineTool()
         self._rect_tool = RectTool()
         self._polygon_tool = PolygonTool()
+        self._brush_tool = BrushTool()
         # 提交后自动选中新建的图元
         self._circle_tool.on_committed(self._auto_select_item)
         self._point_tool.on_committed(self._auto_select_item)
         self._line_tool.on_committed(self._auto_select_item)
         self._rect_tool.on_committed(self._auto_select_item)
         self._polygon_tool.on_committed(self._auto_select_item)
+        self._brush_tool.on_committed(self._auto_select_item)
         self._dragged_item = None
         self._drag_start_pos: QPointF | None = None
         self._pending_paste_payload: dict | None = None
@@ -142,6 +145,11 @@ class CanvasView(QGraphicsView):
             self._tool = self._rect_tool
         elif name == "polygon":
             self._tool = self._polygon_tool
+        elif name.startswith("brush_"):
+            # 设置画笔类型
+            brush_type = name.replace("brush_", "")
+            self._brush_tool.set_brush_type(brush_type)
+            self._tool = self._brush_tool
         else:
             self._tool = None
 

@@ -239,6 +239,14 @@ class PropertyPanel(QWidget):
                     comp = Comp(item, scene, undo_stack)
                     comp.sync_from_item()
                     vbox.addWidget(comp)
+            elif shape == "brush_path":
+                from app.ui.props.brush_properties import (BrushTypeProperty, BrushStrokeProperty, 
+                                                          BrushFillProperty, BrushSmoothingProperty, 
+                                                          BrushEditProperty)
+                for Comp in (BrushTypeProperty, BrushStrokeProperty, BrushFillProperty, 
+                           BrushSmoothingProperty, BrushEditProperty):
+                    comp = Comp(item, scene, undo_stack)
+                    vbox.addWidget(comp)
         except Exception:
             pass
 
@@ -247,6 +255,7 @@ class PropertyPanel(QWidget):
             "点" if shape == "point" else
             "矩形" if shape == "rect" else
             "多边形" if shape == "polygon" else
+            "画笔路径" if shape == "brush_path" else
             "圆"
         )
         self.tabs.addTab(page, title)
