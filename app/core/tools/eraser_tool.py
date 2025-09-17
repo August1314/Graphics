@@ -1,531 +1,353 @@
 from __future__ import annotations
 
 from typing import Optional, List, Callable, Set
+
+try:
+    import pyclipper  # type: ignore
+    _HAS_PYCLIPPER = True
+except Exception:
+    _HAS_PYCLIPPER = False
+
 from PySide6.QtCore import QPointF, QTimer, Qt, QRectF
-from PySide6.QtGui import QPen, QBrush, QColor, QPainterPath, QMouseEvent, QPainter, QPainterPathStroker
+from PySide6.QtGui import QPen, QBrush, QColor, QPainterPath, QMouseEvent, QPainterPathStroker
 from PySide6.QtWidgets import QGraphicsScene, QGraphicsPathItem, QGraphicsItem, QGraphicsEllipseItem
 
 from app.core.tools.base_tool import BaseTool
+from app.core.commands.update_geometry_cmd import UpdateGeometryCommand
 
 
 class EraserTool(BaseTool):
-    """专业橡皮擦工具 - 支持两种擦除模式"""
-    
-    # 擦除模式枚举
+    """商业级橡皮擦工具
+
+    - 普通橡皮擦: 将笔画几何与橡皮擦几何做差集 (object - eraser)
+    - 对象橡皮擦: 直接删除命中的对象
+
+    优先使用 pyclipper 做鲁棒布尔运算；不可用时退回 Qt 的 QPainterPath.subtracted。
+    为避免复杂度爆炸，首次将中心线转换为几何，之后一直在几何上做差集。
+    """
+
     class EraserMode:
-        PATH_ERASER = "path_eraser"    # 普通橡皮擦：路径减法擦除
-        OBJECT_ERASER = "object_eraser"  # 对象橡皮擦：直接删除对象
-    
+        PATH_ERASER = "path_eraser"
+        OBJECT_ERASER = "object_eraser"
+
     def __init__(self, mode: str = EraserMode.PATH_ERASER) -> None:
         super().__init__()
         self._mode = mode
         self._active = False
+        self._on_committed: Optional[Callable[[List[QGraphicsItem]], None]] = None
+
+        # eraser state
+        self._size: float = 15.0
+        self._color: QColor = QColor("#FF0000")
+        self._opacity: float = 0.3
+
+        self._points: List[QPointF] = []
         self._current_path: Optional[QPainterPath] = None
         self._eraser_preview: Optional[QGraphicsEllipseItem] = None
-        self._points: List[QPointF] = []
-        self._on_committed: Optional[Callable[[List[QGraphicsItem]], None]] = None
-        
-        # 橡皮擦属性
-        self._size = 20.0  # 橡皮擦大小
-        self._color = QColor("#FF0000")  # 预览颜色（红色）
-        self._opacity = 0.3  # 预览透明度
-        
-        # 路径平滑参数
-        self._smoothing = True
-        self._min_distance = 3.0  # 最小点间距
-        
-        # 定时器用于路径优化
-        self._optimize_timer = QTimer()
-        self._optimize_timer.setSingleShot(True)
-        self._optimize_timer.timeout.connect(self._optimize_erasing)
-        
-        # 存储被擦除的对象
+        self._eraser_path: Optional[QPainterPath] = None  # scene-space union of eraser dabs
+
+        self._min_distance: float = 3.0
+        self._smoothing: bool = True
+        self._opt_timer = QTimer()
+        self._opt_timer.setSingleShot(True)
+        self._opt_timer.timeout.connect(self._finalize_erasing)
+
+        # affected items: item -> { 'path': QPainterPath, 'mode': 'center'|'geometry', 'pen': QPen }
+        self._affected: dict[QGraphicsPathItem, dict] = {}
         self._erased_items: Set[QGraphicsItem] = set()
-        
-        # 普通橡皮擦专用变量
-        self._eraser_path: Optional[QPainterPath] = None  # 累积的擦除路径
-        self._affected_items: dict = {}  # 被影响的对象及其原始状态
-        
+
+    # ---------- public API ----------
     def set_mode(self, mode: str) -> None:
-        """设置擦除模式"""
         self._mode = mode
-        self._update_eraser_properties()
-    
+
     def set_size(self, size: float) -> None:
-        """设置橡皮擦大小"""
-        self._size = max(1.0, min(100.0, size))
+        self._size = max(1.0, min(200.0, size))
         if self._eraser_preview:
-            self._update_preview_size()
-    
+            self._eraser_preview.setRect(0, 0, self._size, self._size)
+
     def get_size(self) -> float:
-        """获取橡皮擦大小"""
         return self._size
-    
-    def on_press(self, scene: QGraphicsScene, scene_pos: QPointF, event: QMouseEvent) -> None:
-        """开始擦除"""
-        if event.button() == event.button().LeftButton:
-            self._active = True
-            self._points = [scene_pos]
-            self._erased_items.clear()
-            
-            if self._mode == self.EraserMode.PATH_ERASER:
-                # 普通橡皮擦：创建擦除路径
-                self._current_path = QPainterPath()
-                self._current_path.moveTo(scene_pos)
-                self._start_path_erasing(scene, scene_pos)
-            else:
-                # 对象橡皮擦：直接删除对象
-                self._start_object_erasing(scene, scene_pos)
-    
-    def on_move(self, scene: QGraphicsScene, scene_pos: QPointF, event: QMouseEvent) -> None:
-        """继续擦除"""
-        if not self._active:
-            return
-        
-        # 检查最小距离，避免过于密集的点
-        if self._points and self._distance_to_last_point(scene_pos) < self._min_distance:
-            return
-        
-        self._points.append(scene_pos)
-        
-        if self._mode == self.EraserMode.PATH_ERASER:
-            # 普通橡皮擦：更新擦除路径
-            if self._current_path:
-                self._current_path.lineTo(scene_pos)
-                self._continue_path_erasing(scene, scene_pos)
-        else:
-            # 对象橡皮擦：继续删除对象
-            self._continue_object_erasing(scene, scene_pos)
-    
-    def on_release(self, scene: QGraphicsScene, scene_pos: QPointF, event: QMouseEvent) -> None:
-        """结束擦除"""
-        if self._active:
-            if self._mode == self.EraserMode.PATH_ERASER:
-                # 普通橡皮擦：最终优化
-                if self._smoothing and len(self._points) >= 3:
-                    self._optimize_timer.start(50)  # 50ms后优化路径
-                else:
-                    self._finalize_erasing()
-            else:
-                # 对象橡皮擦：直接完成
-                self._finalize_erasing()
-    
-    def cancel(self, scene: QGraphicsScene) -> None:
-        """取消擦除"""
-        self._cleanup_preview(scene)
-        self._reset_state()
-    
+
+    def on_committed(self, cb: Callable[[List[QGraphicsItem]], None]) -> None:
+        self._on_committed = cb
+
     def is_active(self) -> bool:
         return self._active
-    
-    def _start_path_erasing(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
-        """开始路径擦除"""
-        # 创建橡皮擦预览
-        self._create_eraser_preview(scene, scene_pos)
-        
-        # 初始化擦除路径累积器
+
+    def cancel(self, scene: QGraphicsScene) -> None:
+        self._cleanup_preview(scene)
+        self._reset_state()
+
+    # ---------- interaction ----------
+    def on_press(self, scene: QGraphicsScene, scene_pos: QPointF, event: QMouseEvent) -> None:
+        if event.button() != event.button().LeftButton:
+            return
+        self._active = True
+        self._points = [scene_pos]
+        self._erased_items.clear()
+
+        if self._mode == self.EraserMode.PATH_ERASER:
+            self._begin_path_erase(scene, scene_pos)
+        else:
+            self._begin_object_erase(scene, scene_pos)
+
+    def on_move(self, scene: QGraphicsScene, scene_pos: QPointF, event: QMouseEvent) -> None:
+        if not self._active:
+            return
+        if self._points and self._distance(scene_pos, self._points[-1]) < self._min_distance:
+            return
+        self._points.append(scene_pos)
+
+        if self._mode == self.EraserMode.PATH_ERASER:
+            self._continue_path_erase(scene, scene_pos)
+        else:
+            self._continue_object_erase(scene, scene_pos)
+
+    def on_release(self, scene: QGraphicsScene, scene_pos: QPointF, event: QMouseEvent) -> None:
+        if not self._active:
+            return
+        if self._mode == self.EraserMode.PATH_ERASER and self._smoothing and len(self._points) >= 3:
+            self._opt_timer.start(30)
+        else:
+            self._finalize_erasing()
+
+    # ---------- path eraser ----------
+    def _begin_path_erase(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
+        self._create_preview(scene, scene_pos)
         self._eraser_path = QPainterPath()
-        self._eraser_path.addEllipse(scene_pos.x() - self._size/2, scene_pos.y() - self._size/2, 
-                                   self._size, self._size)
-        
-        # 记录被擦除的对象及其原始状态
-        self._affected_items = {}
-        self._find_affected_items(scene, scene_pos)
-        # 立即应用一次实时预览，确保按下后就有反馈
-        self._apply_realtime_erasing()
-    
-    def _continue_path_erasing(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
-        """继续路径擦除"""
-        # 更新橡皮擦预览位置
+        self._add_eraser_dab(scene_pos)
+        self._affected.clear()
+        self._collect_affected_items(scene, scene_pos)
+        self._apply_realtime()
+
+    def _continue_path_erase(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
         if self._eraser_preview:
-            self._eraser_preview.setPos(scene_pos.x() - self._size/2, scene_pos.y() - self._size/2)
-        
-        # 累积擦除路径
-        self._eraser_path.addEllipse(scene_pos.x() - self._size/2, scene_pos.y() - self._size/2, 
-                                   self._size, self._size)
-        
-        # 实时更新被影响的对象
-        self._update_affected_items(scene, scene_pos)
-    
-    def _start_object_erasing(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
-        """开始对象擦除"""
-        # 创建橡皮擦预览
-        self._create_eraser_preview(scene, scene_pos)
-        
-        # 查找并删除对象
-        self._delete_objects_at_position(scene, scene_pos)
-    
-    def _continue_object_erasing(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
-        """继续对象擦除"""
-        # 更新橡皮擦预览位置
+            self._eraser_preview.setPos(scene_pos.x() - self._size / 2.0, scene_pos.y() - self._size / 2.0)
+        self._add_eraser_dab(scene_pos)
+        self._collect_affected_items(scene, scene_pos)
+        self._apply_realtime()
+
+    def _add_eraser_dab(self, scene_pos: QPointF) -> None:
+        if self._eraser_path is None:
+            self._eraser_path = QPainterPath()
+        self._eraser_path.addEllipse(scene_pos.x() - self._size / 2.0,
+                                     scene_pos.y() - self._size / 2.0,
+                                     self._size, self._size)
+
+    # ---------- object eraser ----------
+    def _begin_object_erase(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
+        self._create_preview(scene, scene_pos)
+        self._delete_objects_at(scene, scene_pos)
+
+    def _continue_object_erase(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
         if self._eraser_preview:
-            self._eraser_preview.setPos(scene_pos.x() - self._size/2, scene_pos.y() - self._size/2)
-        
-        # 继续删除对象
-        self._delete_objects_at_position(scene, scene_pos)
-    
-    def _create_eraser_preview(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
-        """创建橡皮擦预览"""
-        if self._eraser_preview:
+            self._eraser_preview.setPos(scene_pos.x() - self._size / 2.0, scene_pos.y() - self._size / 2.0)
+        self._delete_objects_at(scene, scene_pos)
+
+    # ---------- realtime preview ----------
+    def _apply_realtime(self) -> None:
+        if not self._eraser_path:
+            return
+        for item, st in self._affected.items():
+            self._preview_boolean(item, st)
+
+    def _preview_boolean(self, item: QGraphicsPathItem, st: dict) -> None:
+        try:
+            base = st.get('path')
+            if base is None or base.isEmpty():
+                base = item.path()
+            inv, ok = item.sceneTransform().inverted()
+            if not ok:
+                return
+            local_eraser = inv.map(self._eraser_path)
+            pen: QPen = st.get('pen') or item.pen()
+
+            # base geometry
+            if st.get('mode', 'center') == 'center':
+                base = self._stroke_to_geometry(base, pen)
+
+            result = self._difference(base, local_eraser)
+
+            item.setPath(result)
+            # filled rendering for geometry
+            item.setPen(Qt.PenStyle.NoPen)
+            item.setBrush(QBrush(pen.color()))
+
+            # store geometry for subsequent operations
+            st['path'] = result
+            st['mode'] = 'geometry'
+            st['pen'] = pen
+        except Exception:
+            return
+
+    # ---------- finalize ----------
+    def _finalize_erasing(self) -> None:
+        items_to_remove: List[QGraphicsItem] = []
+        geometry_updates: List[UpdateGeometryCommand] = []
+        if self._mode == self.EraserMode.PATH_ERASER:
+            for item, st in list(self._affected.items()):
+                try:
+                    base = st.get('path') or item.path()
+                    inv, ok = item.sceneTransform().inverted()
+                    if not ok or self._eraser_path is None:
+                        continue
+                    local_eraser = inv.map(self._eraser_path)
+                    pen: QPen = st.get('pen') or item.pen()
+                    if st.get('mode', 'center') == 'center':
+                        base = self._stroke_to_geometry(base, pen)
+                    result = self._difference(base, local_eraser)
+                    if result.isEmpty():
+                        items_to_remove.append(item)
+                    else:
+                        # 记录可撤销更新
+                        old_path = item.path()
+                        old_pen = item.pen()
+                        old_brush = item.brush()
+                        new_path = result
+                        new_pen = QPen(Qt.PenStyle.NoPen)
+                        new_brush = QBrush(pen.color())
+                        geometry_updates.append(
+                            UpdateGeometryCommand(item, old_path, new_path, old_pen, new_pen, old_brush, new_brush, text="擦除")
+                        )
+                        # 立即应用以得到正确的后续几何（但通过命令栈管理撤销/重做）
+                        item.setPath(new_path)
+                        item.setPen(new_pen)
+                        item.setBrush(new_brush)
+                        st['path'] = result
+                        st['mode'] = 'geometry'
+                        st['pen'] = pen
+                except Exception:
+                    continue
+        else:
+            items_to_remove.extend(list(self._erased_items))
+
+        # 先发出删除项（对象橡皮擦或路径被完全擦除）
+        if self._on_committed and items_to_remove:
+            self._on_committed(items_to_remove)
+
+        # 将几何更新压入撤销栈
+        try:
+            from app.ui.main_window import MainWindow  # type: ignore
+            # 获取全局 undo_stack：通过场景的 views()[0] 找到 MainWindow 需要已有架构支持
+            # 更稳妥的做法：由 CanvasView 监听 eraser 完成并推命令；这里简单回退：直接在 item.scene().views()[0] 上找 undo_stack
+            for cmd in geometry_updates:
+                scene = cmd._item.scene()
+                if scene and scene.views():
+                    view = scene.views()[0]
+                    mw = view.window()  # type: ignore
+                    if hasattr(mw, 'undo_stack'):
+                        mw.undo_stack.push(cmd)
+        except Exception:
+            pass
+
+        # reset
+        self._reset_state()
+
+    # ---------- helpers ----------
+    def _create_preview(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
+        if self._eraser_preview and self._eraser_preview.scene():
             scene.removeItem(self._eraser_preview)
-        
         self._eraser_preview = QGraphicsEllipseItem(0, 0, self._size, self._size)
-        self._eraser_preview.setPos(scene_pos.x() - self._size/2, scene_pos.y() - self._size/2)
+        self._eraser_preview.setPos(scene_pos.x() - self._size / 2.0, scene_pos.y() - self._size / 2.0)
         self._eraser_preview.setPen(QPen(self._color, 2))
         self._eraser_preview.setBrush(QBrush(self._color, Qt.BrushStyle.NoBrush))
         self._eraser_preview.setOpacity(self._opacity)
-        self._eraser_preview.setZValue(1000)  # 确保在最上层
+        self._eraser_preview.setZValue(1000)
         scene.addItem(self._eraser_preview)
-    
-    def _update_preview_size(self) -> None:
-        """更新预览大小"""
-        if self._eraser_preview:
-            self._eraser_preview.setRect(0, 0, self._size, self._size)
-            pos = self._eraser_preview.pos()
-            self._eraser_preview.setPos(pos.x() + (self._eraser_preview.rect().width() - self._size)/2,
-                                      pos.y() + (self._eraser_preview.rect().height() - self._size)/2)
-    
-    def _find_affected_items(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
-        """查找被橡皮擦影响的对象"""
-        eraser_rect = QRectF(scene_pos.x() - self._size/2, scene_pos.y() - self._size/2, 
-                           self._size, self._size)
-        
-        # 查找与橡皮擦相交的对象
-        items = scene.items(eraser_rect)
-        for item in items:
-            if item == self._eraser_preview:
+
+    def _collect_affected_items(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
+        rect = QRectF(scene_pos.x() - self._size / 2.0, scene_pos.y() - self._size / 2.0, self._size, self._size)
+        for it in scene.items(rect):
+            if not isinstance(it, QGraphicsPathItem) or it is self._eraser_preview:
                 continue
-            
-            if self._can_erase_item(item):
-                # 保存对象的原始状态
-                if item not in self._affected_items:
-                    self._affected_items[item] = {
-                        'original_path': item.path() if isinstance(item, QGraphicsPathItem) else None,
-                        'original_opacity': item.opacity(),
-                        'item_type': type(item).__name__
-                    }
-    
-    def _update_affected_items(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
-        """实时更新被影响的对象"""
-        eraser_rect = QRectF(scene_pos.x() - self._size/2, scene_pos.y() - self._size/2, 
-                           self._size, self._size)
-        
-        # 查找新影响的对象
-        items = scene.items(eraser_rect)
-        for item in items:
-            if item == self._eraser_preview:
-                continue
-            
-            if self._can_erase_item(item) and item not in self._affected_items:
-                # 保存新对象的原始状态
-                self._affected_items[item] = {
-                    'original_path': item.path() if isinstance(item, QGraphicsPathItem) else None,
-                    'original_opacity': item.opacity(),
-                    'item_type': type(item).__name__
+            if it not in self._affected:
+                self._affected[it] = {
+                    'path': it.path(),
+                    'mode': 'center',
+                    'pen': it.pen()
                 }
-        
-        # 实时应用擦除效果
-        self._apply_realtime_erasing()
-    
-    def _delete_objects_at_position(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
-        """删除指定位置的对象"""
-        eraser_rect = QRectF(scene_pos.x() - self._size/2, scene_pos.y() - self._size/2, 
-                           self._size, self._size)
-        
-        # 查找与橡皮擦相交的对象
-        items = scene.items(eraser_rect)
-        for item in items:
-            if item == self._eraser_preview or item in self._erased_items:
+
+    def _delete_objects_at(self, scene: QGraphicsScene, scene_pos: QPointF) -> None:
+        rect = QRectF(scene_pos.x() - self._size / 2.0, scene_pos.y() - self._size / 2.0, self._size, self._size)
+        for it in scene.items(rect):
+            if it is self._eraser_preview:
                 continue
-            
-            # 检查对象类型并删除
-            if self._can_erase_item(item):
-                self._erased_items.add(item)
-    
-    def _can_erase_item(self, item: QGraphicsItem) -> bool:
-        """检查对象是否可以被擦除"""
-        # 排除橡皮擦预览和其他工具对象
-        if item == self._eraser_preview:
-            return False
-        
-        # 只擦除图形对象，不擦除UI元素
-        from app.core.shapes.circle_item import CircleItem
-        from app.core.shapes.point_item import PointItem
-        from app.core.shapes.line_item import LineItem
-        from app.core.shapes.rect_item import RectItem
-        from app.core.shapes.polygon_item import PolygonItem
-        from app.core.shapes.brush_path_item import BrushPathItem
-        
-        return isinstance(item, (CircleItem, PointItem, LineItem, RectItem, 
-                               PolygonItem, BrushPathItem, QGraphicsEllipseItem, 
-                               QGraphicsPathItem))
-    
-    def _apply_realtime_erasing(self) -> None:
-        """实时应用擦除效果（预览）"""
-        for item, state in self._affected_items.items():
-            if isinstance(item, QGraphicsPathItem):
-                # 对路径对象进行实时减法预览
-                self._preview_path_subtraction(item, state)
-            else:
-                # 对其他对象降低透明度预览
-                self._preview_opacity_reduction(item, state)
-    
-    def _preview_path_subtraction(self, item: QGraphicsPathItem, state: dict) -> None:
-        """预览路径减法效果：对笔画几何进行布尔减法，不再只是降低透明度"""
-        try:
-            original_path = state['original_path']
-            if not original_path or original_path.isEmpty() or self._eraser_path is None:
-                return
+            self._erased_items.add(it)
 
-            # 将橡皮擦路径从场景坐标映射到图元的本地坐标（使用逆场景变换更稳健）
-            inv, ok = item.sceneTransform().inverted()
-            local_eraser_path: QPainterPath = inv.map(self._eraser_path) if ok else item.mapFromScene(self._eraser_path)
-
-            # 使用笔宽生成笔画几何（填充路径）
-            pen = item.pen() if hasattr(item, 'pen') else QPen(QColor('#000000'), 1.0)
-            stroker = QPainterPathStroker()
-            stroker.setWidth(max(0.1, pen.widthF()))
-            stroker.setCapStyle(pen.capStyle())
-            stroker.setJoinStyle(pen.joinStyle())
-            stroked_path: QPainterPath = stroker.createStroke(original_path)
-
-            # 进行减法得到预览结果
-            preview_path: QPainterPath = stroked_path.subtracted(local_eraser_path)
-
-            item.setUpdatesEnabled(False)
-            # 以填充方式展示剩余的笔画区域，避免中心线减法造成的“变暗”问题
-            item.setPath(preview_path)
-            # 将笔设为无、使用原笔颜色作为填充，使观感与描边一致
-            color = pen.color()
-            item.setPen(QPen(Qt.PenStyle.NoPen))
-            item.setBrush(QBrush(color))
-            item.setUpdatesEnabled(True)
-        except Exception:
-            # 降级处理：保持原始不变，避免闪烁
-            pass
-    
-    def _preview_opacity_reduction(self, item: QGraphicsItem, state: dict) -> None:
-        """预览透明度降低效果"""
-        # 计算擦除程度（基于橡皮擦路径与对象的交集）
-        intersection_ratio = self._calculate_intersection_ratio(item)
-        reduction_factor = min(0.8, intersection_ratio * 0.6)  # 最多降低80%
-        
-        new_opacity = max(0.1, state['original_opacity'] * (1.0 - reduction_factor))
-        item.setOpacity(new_opacity)
-    
-    def _calculate_intersection_ratio(self, item: QGraphicsItem) -> float:
-        """计算橡皮擦路径与对象的交集比例"""
-        try:
-            item_rect = item.boundingRect()
-            item_rect = item.mapRectToScene(item_rect)
-            
-            eraser_rect = self._eraser_path.boundingRect()
-            
-            # 计算交集
-            intersection = item_rect.intersected(eraser_rect)
-            if intersection.isEmpty():
-                return 0.0
-            
-            # 计算交集比例
-            intersection_area = intersection.width() * intersection.height()
-            item_area = item_rect.width() * item_rect.height()
-            
-            if item_area > 0:
-                return intersection_area / item_area
-            return 0.0
-        except Exception:
-            return 0.5  # 默认值
-    
-    def _subtract_path_from_item(self, item: QGraphicsPathItem, scene_pos: QPointF) -> None:
-        """从路径对象中减去橡皮擦路径"""
-        # 创建橡皮擦圆形路径
-        eraser_path = QPainterPath()
-        eraser_path.addEllipse(scene_pos.x() - self._size/2, scene_pos.y() - self._size/2, 
-                             self._size, self._size)
-        
-        # 获取原路径
-        original_path = item.path()
-        
-        # 检查路径是否为空或无效
-        if original_path.isEmpty():
-            return
-        
-        # 执行路径减法
-        try:
-            subtracted_path = original_path.subtracted(eraser_path)
-            
-            # 检查减法结果是否有效
-            if not subtracted_path.isEmpty():
-                # 临时禁用更新以避免闪烁
-                item.setUpdatesEnabled(False)
-                item.setPath(subtracted_path)
-                item.setUpdatesEnabled(True)
-            else:
-                # 如果路径被完全擦除，降低透明度而不是删除
-                current_opacity = item.opacity()
-                new_opacity = max(0.0, current_opacity - 0.1)
-                item.setOpacity(new_opacity)
-                
-        except Exception:
-            # 如果路径减法失败，降低透明度
-            current_opacity = item.opacity()
-            new_opacity = max(0.0, current_opacity - 0.1)
-            item.setOpacity(new_opacity)
-    
-    def _optimize_erasing(self) -> None:
-        """优化擦除路径"""
-        if len(self._points) > 10:  # 只对复杂路径优化
-            # 简单的道格拉斯-普克算法简化
-            simplified_points = self._douglas_peucker(self._points, 2.0)
-            if len(simplified_points) < len(self._points):
-                self._points = simplified_points
-        
-        self._finalize_erasing()
-    
-    def _finalize_erasing(self) -> None:
-        """完成擦除"""
-        if self._mode == self.EraserMode.PATH_ERASER:
-            # 普通橡皮擦：应用最终的路径减法
-            self._apply_final_path_erasing()
-        else:
-            # 对象橡皮擦：直接删除对象
-            if self._on_committed and self._erased_items:
-                self._on_committed(list(self._erased_items))
-        
-        self._reset_state()
-    
-    def _apply_final_path_erasing(self) -> None:
-        """应用最终的路径擦除效果"""
-        items_to_remove = []
-        
-        for item, state in self._affected_items.items():
-            if isinstance(item, QGraphicsPathItem):
-                # 对路径对象进行最终减法
-                if self._apply_final_path_subtraction(item, state):
-                    items_to_remove.append(item)
-            else:
-                # 对其他对象进行最终处理
-                if self._apply_final_opacity_reduction(item, state):
-                    items_to_remove.append(item)
-        
-        # 发出删除信号
-        if self._on_committed and items_to_remove:
-            self._on_committed(items_to_remove)
-    
-    def _apply_final_path_subtraction(self, item: QGraphicsPathItem, state: dict) -> bool:
-        """应用最终的路径减法（笔画几何减法）。返回是否应当删除对象。"""
-        try:
-            original_path = state['original_path']
-            if not original_path or original_path.isEmpty() or self._eraser_path is None:
-                return False
-
-            inv, ok = item.sceneTransform().inverted()
-            local_eraser_path: QPainterPath = inv.map(self._eraser_path) if ok else item.mapFromScene(self._eraser_path)
-
-            pen = item.pen() if hasattr(item, 'pen') else QPen(QColor('#000000'), 1.0)
-            stroker = QPainterPathStroker()
-            stroker.setWidth(max(0.1, pen.widthF()))
-            stroker.setCapStyle(pen.capStyle())
-            stroker.setJoinStyle(pen.joinStyle())
-            stroked_path: QPainterPath = stroker.createStroke(original_path)
-
-            result_path: QPainterPath = stroked_path.subtracted(local_eraser_path)
-
-            if result_path.isEmpty():
-                return True
-
-            item.setUpdatesEnabled(False)
-            item.setPath(result_path)
-            # 以填充显示剩余笔画，恢复原始不透明度
-            item.setPen(QPen(Qt.PenStyle.NoPen))
-            item.setBrush(QBrush(pen.color()))
-            item.setOpacity(state['original_opacity'])
-            item.setUpdatesEnabled(True)
-            return False
-        except Exception:
-            return False
-    
-    def _apply_final_opacity_reduction(self, item: QGraphicsItem, state: dict) -> bool:
-        """应用最终的透明度降低，返回是否应该删除对象"""
-        intersection_ratio = self._calculate_intersection_ratio(item)
-        
-        if intersection_ratio > 0.8:  # 如果交集超过80%，删除对象
-            return True
-        elif intersection_ratio > 0.3:  # 如果交集超过30%，降低透明度
-            reduction_factor = min(0.7, intersection_ratio * 0.8)
-            new_opacity = max(0.1, state['original_opacity'] * (1.0 - reduction_factor))
-            item.setOpacity(new_opacity)
-            return False
-        else:
-            # 交集较小，恢复原始透明度
-            item.setOpacity(state['original_opacity'])
-            return False
-    
     def _cleanup_preview(self, scene: QGraphicsScene) -> None:
-        """清理预览对象"""
         if self._eraser_preview and self._eraser_preview.scene():
             scene.removeItem(self._eraser_preview)
         self._eraser_preview = None
-    
+
     def _reset_state(self) -> None:
-        """重置工具状态"""
         self._active = False
+        self._points.clear()
         self._current_path = None
-        self._points = []
-        self._erased_items.clear()
         self._eraser_path = None
-        self._affected_items = {}
-        self._optimize_timer.stop()
-    
-    def _distance_to_last_point(self, point: QPointF) -> float:
-        """计算到最后一个点的距离"""
-        if not self._points:
-            return float('inf')
-        last_point = self._points[-1]
-        return ((point.x() - last_point.x()) ** 2 + (point.y() - last_point.y()) ** 2) ** 0.5
-    
-    def _douglas_peucker(self, points: List[QPointF], tolerance: float) -> List[QPointF]:
-        """道格拉斯-普克算法简化路径"""
-        if len(points) <= 2:
-            return points
-        
-        # 找到距离起点和终点连线最远的点
-        max_distance = 0
-        max_index = 0
-        start = points[0]
-        end = points[-1]
-        
-        for i in range(1, len(points) - 1):
-            distance = self._point_to_line_distance(points[i], start, end)
-            if distance > max_distance:
-                max_distance = distance
-                max_index = i
-        
-        # 如果最大距离大于容差，递归处理
-        if max_distance > tolerance:
-            left_points = self._douglas_peucker(points[:max_index + 1], tolerance)
-            right_points = self._douglas_peucker(points[max_index:], tolerance)
-            return left_points[:-1] + right_points
-        else:
-            return [start, end]
-    
-    def _point_to_line_distance(self, point: QPointF, line_start: QPointF, line_end: QPointF) -> float:
-        """计算点到直线的距离"""
-        A = line_end.y() - line_start.y()
-        B = line_start.x() - line_end.x()
-        C = line_end.x() * line_start.y() - line_start.x() * line_end.y()
-        
-        return abs(A * point.x() + B * point.y() + C) / (A * A + B * B) ** 0.5
-    
-    def _update_eraser_properties(self) -> None:
-        """根据模式更新橡皮擦属性"""
-        if self._mode == self.EraserMode.PATH_ERASER:
-            self._color = QColor("#FF0000")  # 红色预览
-            self._opacity = 0.3
-        else:
-            self._color = QColor("#FF6600")  # 橙色预览
-            self._opacity = 0.4
-    
-    def on_committed(self, cb: Callable[[List[QGraphicsItem]], None]) -> None:
-        """设置擦除完成回调"""
-        self._on_committed = cb
+        self._affected.clear()
+        self._erased_items.clear()
+        self._opt_timer.stop()
+
+    # ---- geometry/boolean helpers ----
+    def _stroke_to_geometry(self, path: QPainterPath, pen: QPen) -> QPainterPath:
+        stroker = QPainterPathStroker()
+        stroker.setWidth(max(0.1, pen.widthF()))
+        stroker.setCapStyle(pen.capStyle())
+        stroker.setJoinStyle(pen.joinStyle())
+        return stroker.createStroke(path)
+
+    def _difference(self, subject: QPainterPath, clip: QPainterPath) -> QPainterPath:
+        if subject.isEmpty():
+            return QPainterPath()
+        if clip.isEmpty():
+            return subject
+        if _HAS_PYCLIPPER:
+            try:
+                scale = 100.0  # enough precision
+                subj_polys = self._to_polygons(subject, scale)
+                clip_polys = self._to_polygons(clip, scale)
+                pc = pyclipper.Pyclipper()
+                pc.AddPaths(subj_polys, pyclipper.PT_SUBJECT, True)
+                pc.AddPaths(clip_polys, pyclipper.PT_CLIP, True)
+                solution = pc.Execute(pyclipper.CT_DIFFERENCE, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO)
+                return self._from_polygons(solution, scale)
+            except Exception:
+                pass
+        # fallback
+        return subject.subtracted(clip)
+
+    def _to_polygons(self, path: QPainterPath, scale: float) -> List[List[tuple[int, int]]]:
+        polys = path.toFillPolygons()
+        out: List[List[tuple[int, int]]] = []
+        for poly in polys:
+            pts: List[tuple[int, int]] = []
+            for p in poly:
+                pts.append((int(round(p.x() * scale)), int(round(p.y() * scale))))
+            if len(pts) >= 3:
+                out.append(pts)
+        return out
+
+    def _from_polygons(self, paths: List[List[tuple[int, int]]], scale: float) -> QPainterPath:
+        res = QPainterPath()
+        for poly in paths:
+            if not poly:
+                continue
+            first = True
+            for x, y in poly:
+                px = x / scale
+                py = y / scale
+                if first:
+                    res.moveTo(px, py)
+                    first = False
+                else:
+                    res.lineTo(px, py)
+            res.closeSubpath()
+        return res
+
+    @staticmethod
+    def _distance(a: QPointF, b: QPointF) -> float:
+        dx = a.x() - b.x()
+        dy = a.y() - b.y()
+        return (dx * dx + dy * dy) ** 0.5
+
+

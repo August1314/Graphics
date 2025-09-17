@@ -31,6 +31,9 @@ class BrushPathItem(QGraphicsPathItem):
         
         # 编辑状态
         self._editing = False
+        
+        # 性能优化：启用渲染缓存
+        self.setCacheMode(self.CacheMode.ItemCoordinateCache)
         self._control_points: List[QPointF] = []
         self._selected_control_point = -1
         

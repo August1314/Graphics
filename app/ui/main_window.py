@@ -553,8 +553,8 @@ class MainWindow(QMainWindow):
         if ok:
             self.statusBar().showMessage("复制成功", 3000)
         else:
-            self.statusBar().showMessage("复制失败：无支持的圆形", 3000)
-            QMessageBox.warning(self, "复制失败", "请确保选中或鼠标在圆/椭圆上再执行复制。")
+            # 非侵入式提示，避免在非用户触发的场景反复弹窗打断操作
+            self.statusBar().showMessage("复制失败：未命中可复制对象", 3000)
 
     def _on_paste_completed(self, ok: bool) -> None:
         self.statusBar().showMessage("粘贴成功" if ok else "粘贴失败：剪贴板无有效数据", 3000)
