@@ -44,6 +44,8 @@ class BrushTool(BaseTool):
         self._optimize_timer = QTimer()
         self._optimize_timer.setSingleShot(True)
         self._optimize_timer.timeout.connect(self._optimize_path)
+        # 初始化一次笔参数，确保默认宽度生效
+        self._update_brush_properties()
         
     def set_brush_type(self, brush_type: str) -> None:
         """设置画笔类型"""
@@ -74,6 +76,8 @@ class BrushTool(BaseTool):
         """开始绘制路径"""
         if event.button() == event.button().LeftButton:
             self._active = True
+            # 确保当前类型对应的笔参数在创建路径前生效
+            self._update_brush_properties()
             self._current_path = QPainterPath()
             self._current_path.moveTo(scene_pos)
             self._points = [scene_pos]
@@ -135,12 +139,12 @@ class BrushTool(BaseTool):
             self._pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             self._pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == self.BrushType.SPRAY:
-            self._pen.setWidthF(12.0)
+            self._pen.setWidthF(8.0)
             self._pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             self._pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == self.BrushType.ERASER:
             self._pen.setColor(QColor("#FFFFFF"))
-            self._pen.setWidthF(10.0)
+            self._pen.setWidthF(8.0)
             self._pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             self._pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
     

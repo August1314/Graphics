@@ -32,6 +32,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.view)
 
         self.undo_stack = QUndoStack(self)
+        # 撤销/重做后刷新属性面板，保持与当前选中项状态一致
+        try:
+            self.undo_stack.indexChanged.connect(self._on_undo_index_changed)
+        except Exception:
+            pass
 
         # 设置项：切回选择工具时恢复上次选择
         self._restore_prev_selection_enabled: bool = True
@@ -621,4 +626,25 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "加载失败", str(e))
 
+
+    # ---- 槽：撤销栈变化时刷新属性面板（带有效性检查，避免退出时访问已销毁对象） ----
+    def _on_undo_index_changed(self, *_args) -> None:
+        try:
+            from shiboken6 import isValid  # type: ignore
+        except Exception:
+            def isValid(obj):
+                try:
+                    return obj is not None
+                except Exception:
+                    return False
+        if not isValid(self.scene) or not isValid(self.property_panel):
+            return
+        self._on_scene_selection_changed()
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        try:
+            self.undo_stack.indexChanged.disconnect(self._on_undo_index_changed)
+        except Exception:
+            pass
+        super().closeEvent(event)
 

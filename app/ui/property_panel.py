@@ -211,31 +211,27 @@ class PropertyPanel(QWidget):
                 from app.ui.props.center import CenterProperty
                 from app.ui.props.radius import RadiusProperty
                 from app.ui.props.stroke import StrokeProperty
-                from app.ui.props.fill_opacity import FillAndOpacityProperty
-                for Comp in (CenterProperty, RadiusProperty, StrokeProperty, FillAndOpacityProperty):
+                for Comp in (CenterProperty, RadiusProperty, StrokeProperty):
                     comp = Comp(item, scene, undo_stack)
                     comp.sync_from_item()
                     vbox.addWidget(comp)
             elif shape == "line":
                 from app.ui.props.line_endpoints import LineEndpointsProperty
                 from app.ui.props.stroke import StrokeProperty
-                from app.ui.props.fill_opacity import FillAndOpacityProperty
-                for Comp in (LineEndpointsProperty, StrokeProperty, FillAndOpacityProperty):
+                for Comp in (LineEndpointsProperty, StrokeProperty):
                     comp = Comp(item, scene, undo_stack)
                     comp.sync_from_item()
                     vbox.addWidget(comp)
             elif shape == "rect":
                 from app.ui.props.rect_geom import RectGeomProperty
                 from app.ui.props.stroke import StrokeProperty
-                from app.ui.props.fill_opacity import FillAndOpacityProperty
-                for Comp in (RectGeomProperty, StrokeProperty, FillAndOpacityProperty):
+                for Comp in (RectGeomProperty, StrokeProperty):
                     comp = Comp(item, scene, undo_stack)
                     comp.sync_from_item()
                     vbox.addWidget(comp)
             elif shape == "polygon":
                 from app.ui.props.stroke import StrokeProperty
-                from app.ui.props.fill_opacity import FillAndOpacityProperty
-                for Comp in (StrokeProperty, FillAndOpacityProperty):
+                for Comp in (StrokeProperty,):
                     comp = Comp(item, scene, undo_stack)
                     comp.sync_from_item()
                     vbox.addWidget(comp)

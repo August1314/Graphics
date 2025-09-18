@@ -86,7 +86,13 @@ class BrushStrokeProperty(QWidget):
         self.width_spin.setRange(0.5, 50.0)
         self.width_spin.setSingleStep(0.5)
         self.width_spin.setValue(self._item.pen().widthF())
+        self._last_width = float(self._item.pen().widthF())
         self.width_spin.valueChanged.connect(self._on_width_changed)
+        # 提交时入撤销栈
+        try:
+            self.width_spin.editingFinished.connect(self._commit_width)
+        except Exception:
+            pass
         
         width_layout.addWidget(width_label)
         width_layout.addWidget(self.width_spin)
@@ -130,17 +136,36 @@ class BrushStrokeProperty(QWidget):
         current_color = self._item.pen().color()
         color = QColorDialog.getColor(current_color, self.color_button, "选择笔触颜色")
         if color.isValid():
-            pen = self._item.pen()
-            pen.setColor(color)
-            self._item.setPen(pen)
-            self._update_color_button()
-            self.scene.update_base_style(self._item)
+            old = current_color
+            new = color
+            def do():
+                p = self._item.pen(); p.setColor(new); self._item.setPen(p); self.scene.update_base_style(self._item)
+            def undo():
+                p = self._item.pen(); p.setColor(old); self._item.setPen(p); self.scene.update_base_style(self._item)
+            self.undo_stack.push(UpdateStyleCommand.make("修改笔触颜色", do, undo))
+            # 按钮预览颜色刷新（控件仍存活时）
+            try:
+                self._update_color_button()
+            except Exception:
+                pass
     
     def _on_width_changed(self, value: float) -> None:
         pen = self._item.pen()
         pen.setWidthF(value)
         self._item.setPen(pen)
         self.scene.update_base_style(self._item)
+
+    def _commit_width(self) -> None:
+        new_w = float(self.width_spin.value())
+        old_w = float(self._last_width)
+        if abs(new_w - old_w) < 1e-6:
+            return
+        def do():
+            p = self._item.pen(); p.setWidthF(new_w); self._item.setPen(p); self.scene.update_base_style(self._item)
+        def undo():
+            p = self._item.pen(); p.setWidthF(old_w); self._item.setPen(p); self.scene.update_base_style(self._item)
+        self.undo_stack.push(UpdateStyleCommand.make("修改笔触宽度", do, undo))
+        self._last_width = new_w
     
     def _on_style_changed(self, text: str) -> None:
         if text in self.style_mapping:
@@ -167,7 +192,12 @@ class BrushOpacityProperty(QWidget):
         self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self.opacity_slider.setRange(0, 100)
         self.opacity_slider.setValue(int(self._item.opacity() * 100))
+        self._last_opacity = float(self._item.opacity())
         self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
+        try:
+            self.opacity_slider.sliderReleased.connect(self._commit_opacity)
+        except Exception:
+            pass
         
         self.opacity_label = QLabel(f"{int(self._item.opacity() * 100)}%")
         self.opacity_label.setMinimumWidth(40)
@@ -183,6 +213,18 @@ class BrushOpacityProperty(QWidget):
         self._item.setOpacity(opacity)
         self.opacity_label.setText(f"{value}%")
         self.scene.update_base_style(self._item)
+
+    def _commit_opacity(self) -> None:
+        new_op = float(self._item.opacity())
+        old_op = float(self._last_opacity)
+        if abs(new_op - old_op) < 1e-6:
+            return
+        def do():
+            self._item.setOpacity(new_op); self.scene.update_base_style(self._item)
+        def undo():
+            self._item.setOpacity(old_op); self.scene.update_base_style(self._item)
+        self.undo_stack.push(UpdateStyleCommand.make("修改透明度", do, undo))
+        self._last_opacity = new_op
 
 
 class BrushSmoothingProperty:  # 已移除（占位）

@@ -46,7 +46,7 @@ class StrokeProperty(QWidget):
         def undo():
             pen = self.item.pen(); pen.setColor(old); self.item.setPen(pen); self.scene.update_base_style(self.item)
         self.undo_stack.push(UpdateStyleCommand.make("修改描边颜色", do, undo))
-        self.sync_from_item()
+        # 不再在此处强制刷新 UI，避免撤销/重做导致属性面板重建后触发已销毁控件访问
 
     def _apply_width(self, v: int) -> None:
         nw = max(0.1, float(v)); old = self.item.pen().widthF()

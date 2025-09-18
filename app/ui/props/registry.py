@@ -12,19 +12,19 @@ class PropertyRegistry:
     def keys_for_shape(shape: str) -> List[str]:
         if shape in ("circle", "point"):
             return [
-                "center", "radius", "strokeColor", "strokeWidth", "dash", "fillColor", "opacity",
+                "center", "radius", "strokeColor", "strokeWidth", "dash",
             ]
         if shape == "line":
             return [
-                "lineP1", "lineP2", "strokeColor", "strokeWidth", "dash", "opacity",
+                "lineP1", "lineP2", "strokeColor", "strokeWidth", "dash",
             ]
         if shape == "rect":
             return [
-                "rectGeom", "strokeColor", "strokeWidth", "dash", "fillColor", "opacity",
+                "rectGeom", "strokeColor", "strokeWidth", "dash",
             ]
         if shape == "polygon":
             return [
-                "strokeColor", "strokeWidth", "dash", "fillColor", "opacity",
+                "strokeColor", "strokeWidth", "dash",
             ]
         if shape == "brush_path":
             return [

@@ -240,7 +240,7 @@ class BrushPathItem(QGraphicsPathItem):
         pen = self.pen()
         
         if self._brush_type == "pen":
-            pen.setWidthF(3.0)
+            pen.setWidthF(8.0)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == "marker":
@@ -248,16 +248,16 @@ class BrushPathItem(QGraphicsPathItem):
             pen.setCapStyle(Qt.PenCapStyle.SquareCap)
             pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
         elif self._brush_type == "calligraphy":
-            pen.setWidthF(5.0)
+            pen.setWidthF(8.0)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == "spray":
-            pen.setWidthF(12.0)
+            pen.setWidthF(8.0)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == "eraser":
             pen.setColor(QColor("#FFFFFF"))
-            pen.setWidthF(10.0)
+            pen.setWidthF(8.0)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         

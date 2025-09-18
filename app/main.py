@@ -16,7 +16,7 @@ def main() -> int:
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     # 应用 Material 主题（深色），后续可切换 light_*.xml
     try:
-        apply_stylesheet(app, theme='light_.xml')
+        apply_stylesheet(app, theme='light_*.xml')
     except Exception:
         pass
     window = MainWindow()
