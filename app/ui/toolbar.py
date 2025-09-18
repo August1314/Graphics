@@ -3,6 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import QToolBar, QToolButton, QMenu
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QIcon
 from app.ui.icon_provider import IconProvider
 
@@ -15,6 +16,9 @@ class ToolBar(QToolBar):
         self.setMovable(True)
         self.setFloatable(True)
         self._icons = IconProvider("light")
+        # 统一图标大小与展示风格
+        self.setIconSize(QSize(18, 18))
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
 
         self._group = QActionGroup(self)
         self._group.setExclusive(True)
@@ -23,29 +27,31 @@ class ToolBar(QToolBar):
         self.action_select = QAction(self._icons.get("select"), "选择", self)
         self.action_select.setCheckable(True)
         self.action_select.setData("select")
+        self.action_select.setIconVisibleInMenu(True)
         self._group.addAction(self.action_select)
         self.addAction(self.action_select)
 
         # 形状动作
-        self.action_point = QAction(self._icons.get("point"), "点", self); self.action_point.setCheckable(True); self.action_point.setData("point"); self._group.addAction(self.action_point)
-        self.action_line = QAction(self._icons.get("line"), "直线", self); self.action_line.setCheckable(True); self.action_line.setData("line"); self._group.addAction(self.action_line)
-        self.action_rect = QAction(self._icons.get("rect"), "矩形", self); self.action_rect.setCheckable(True); self.action_rect.setData("rect"); self._group.addAction(self.action_rect)
-        self.action_ellipse = QAction(self._icons.get("circle"), "圆", self); self.action_ellipse.setCheckable(True); self.action_ellipse.setData("circle"); self._group.addAction(self.action_ellipse)
-        self.action_polygon = QAction(self._icons.get("polygon"), "多边形", self); self.action_polygon.setCheckable(True); self.action_polygon.setData("polygon"); self._group.addAction(self.action_polygon)
+        self.action_point = QAction(self._icons.get("point"), "点", self); self.action_point.setCheckable(True); self.action_point.setData("point"); self.action_point.setIconVisibleInMenu(True); self._group.addAction(self.action_point)
+        self.action_line = QAction(self._icons.get("line"), "直线", self); self.action_line.setCheckable(True); self.action_line.setData("line"); self.action_line.setIconVisibleInMenu(True); self._group.addAction(self.action_line)
+        self.action_rect = QAction(self._icons.get("rect"), "矩形", self); self.action_rect.setCheckable(True); self.action_rect.setData("rect"); self.action_rect.setIconVisibleInMenu(True); self._group.addAction(self.action_rect)
+        self.action_ellipse = QAction(self._icons.get("circle"), "圆", self); self.action_ellipse.setCheckable(True); self.action_ellipse.setData("circle"); self.action_ellipse.setIconVisibleInMenu(True); self._group.addAction(self.action_ellipse)
+        self.action_polygon = QAction(self._icons.get("polygon"), "多边形", self); self.action_polygon.setCheckable(True); self.action_polygon.setData("polygon"); self.action_polygon.setIconVisibleInMenu(True); self._group.addAction(self.action_polygon)
         
         # 画笔动作
-        self.action_brush_pen = QAction(self._icons.get("brush"), "普通画笔", self); self.action_brush_pen.setCheckable(True); self.action_brush_pen.setData("brush_pen"); self._group.addAction(self.action_brush_pen)
-        self.action_brush_marker = QAction(self._icons.get("brush"), "马克笔", self); self.action_brush_marker.setCheckable(True); self.action_brush_marker.setData("brush_marker"); self._group.addAction(self.action_brush_marker)
-        self.action_brush_calligraphy = QAction(self._icons.get("brush"), "书法笔", self); self.action_brush_calligraphy.setCheckable(True); self.action_brush_calligraphy.setData("brush_calligraphy"); self._group.addAction(self.action_brush_calligraphy)
-        self.action_brush_spray = QAction(self._icons.get("brush"), "喷枪", self); self.action_brush_spray.setCheckable(True); self.action_brush_spray.setData("brush_spray"); self._group.addAction(self.action_brush_spray)
+        self.action_brush_pen = QAction(self._icons.get("brush"), "普通画笔", self); self.action_brush_pen.setCheckable(True); self.action_brush_pen.setData("brush_pen"); self.action_brush_pen.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_pen)
+        self.action_brush_marker = QAction(self._icons.get("brush"), "马克笔", self); self.action_brush_marker.setCheckable(True); self.action_brush_marker.setData("brush_marker"); self.action_brush_marker.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_marker)
+        self.action_brush_calligraphy = QAction(self._icons.get("brush"), "书法笔", self); self.action_brush_calligraphy.setCheckable(True); self.action_brush_calligraphy.setData("brush_calligraphy"); self.action_brush_calligraphy.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_calligraphy)
+        self.action_brush_spray = QAction(self._icons.get("brush"), "喷枪", self); self.action_brush_spray.setCheckable(True); self.action_brush_spray.setData("brush_spray"); self.action_brush_spray.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_spray)
         
         # 橡皮擦动作
-        self.action_eraser = QAction(self._icons.get("eraser"), "橡皮擦", self); self.action_eraser.setCheckable(True); self.action_eraser.setData("eraser"); self._group.addAction(self.action_eraser)
+        self.action_eraser = QAction(self._icons.get("eraser"), "橡皮擦", self); self.action_eraser.setCheckable(True); self.action_eraser.setData("eraser"); self.action_eraser.setIconVisibleInMenu(True); self._group.addAction(self.action_eraser)
 
         # 下拉按钮“图形”
         self.shape_button = QToolButton(self)
         self.shape_button.setText("图形")
-        self.shape_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        # 点击整个按钮直接弹出菜单
+        self.shape_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.shape_menu = QMenu(self.shape_button)
         for a in (self.action_point, self.action_line, self.action_rect, self.action_ellipse, self.action_polygon):
             self.shape_menu.addAction(a)
@@ -55,7 +61,8 @@ class ToolBar(QToolBar):
         # 下拉按钮"画笔"
         self.brush_button = QToolButton(self)
         self.brush_button.setText("画笔")
-        self.brush_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        # 点击整个按钮直接弹出菜单
+        self.brush_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.brush_menu = QMenu(self.brush_button)
         for a in (self.action_brush_pen, self.action_brush_marker, self.action_brush_calligraphy, 
                   self.action_brush_spray):

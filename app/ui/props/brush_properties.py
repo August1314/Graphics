@@ -4,22 +4,21 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor, QPen, QBrush
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QSpinBox, QDoubleSpinBox, QSlider, QComboBox, 
-                               QPushButton, QColorDialog, QCheckBox, QGroupBox)
+                               QPushButton, QColorDialog)
 
-from app.ui.props.base import PropertyComponent
 from app.core.shapes.brush_path_item import BrushPathItem
+from app.core.commands.update_style_cmd import UpdateStyleCommand
 
 
-class BrushTypeProperty(PropertyComponent):
+class BrushTypeProperty(QWidget):
     """画笔类型属性组件"""
     
     def __init__(self, item, scene, undo_stack) -> None:
-        super().__init__(item, scene, undo_stack)
+        super().__init__()
         self._item: BrushPathItem = item
-        
-    def create_widget(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        self.scene = scene
+        self.undo_stack = undo_stack
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
         # 画笔类型选择
@@ -48,8 +47,6 @@ class BrushTypeProperty(PropertyComponent):
         
         layout.addWidget(type_label)
         layout.addWidget(self.type_combo)
-        
-        return widget
     
     def _on_type_changed(self, text: str) -> None:
         if text in self.type_mapping:
@@ -59,16 +56,15 @@ class BrushTypeProperty(PropertyComponent):
             self.scene.update_base_style(self._item)
 
 
-class BrushStrokeProperty(PropertyComponent):
+class BrushStrokeProperty(QWidget):
     """画笔笔触属性组件"""
     
     def __init__(self, item, scene, undo_stack) -> None:
-        super().__init__(item, scene, undo_stack)
+        super().__init__()
         self._item: BrushPathItem = item
-        
-    def create_widget(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        self.scene = scene
+        self.undo_stack = undo_stack
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
         # 笔触颜色
@@ -125,8 +121,6 @@ class BrushStrokeProperty(PropertyComponent):
         layout.addLayout(color_layout)
         layout.addLayout(width_layout)
         layout.addLayout(style_layout)
-        
-        return widget
     
     def _update_color_button(self) -> None:
         color = self._item.pen().color()
@@ -156,16 +150,15 @@ class BrushStrokeProperty(PropertyComponent):
             self.scene.update_base_style(self._item)
 
 
-class BrushOpacityProperty(PropertyComponent):
+class BrushOpacityProperty(QWidget):
     """画笔透明度属性组件"""
     
     def __init__(self, item, scene, undo_stack) -> None:
-        super().__init__(item, scene, undo_stack)
+        super().__init__()
         self._item: BrushPathItem = item
-        
-    def create_widget(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        self.scene = scene
+        self.undo_stack = undo_stack
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
         # 透明度
@@ -184,8 +177,6 @@ class BrushOpacityProperty(PropertyComponent):
         opacity_layout.addWidget(self.opacity_label)
         
         layout.addLayout(opacity_layout)
-        
-        return widget
     
     def _on_opacity_changed(self, value: int) -> None:
         opacity = value / 100.0
@@ -194,102 +185,8 @@ class BrushOpacityProperty(PropertyComponent):
         self.scene.update_base_style(self._item)
 
 
-class BrushSmoothingProperty(PropertyComponent):
-    """画笔平滑属性组件"""
-    
-    def __init__(self, item, scene, undo_stack) -> None:
-        super().__init__(item, scene, undo_stack)
-        self._item: BrushPathItem = item
-        
-    def create_widget(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 平滑开关
-        self.smoothing_check = QCheckBox("启用路径平滑")
-        self.smoothing_check.setChecked(self._item.smoothing_enabled())
-        self.smoothing_check.toggled.connect(self._on_smoothing_toggled)
-        
-        # 平滑按钮
-        button_layout = QHBoxLayout()
-        self.smooth_button = QPushButton("平滑路径")
-        self.smooth_button.clicked.connect(self._on_smooth_clicked)
-        
-        self.simplify_button = QPushButton("简化路径")
-        self.simplify_button.clicked.connect(self._on_simplify_clicked)
-        
-        button_layout.addWidget(self.smooth_button)
-        button_layout.addWidget(self.simplify_button)
-        
-        layout.addWidget(self.smoothing_check)
-        layout.addLayout(button_layout)
-        
-        return widget
-    
-    def _on_smoothing_toggled(self, checked: bool) -> None:
-        self._item.set_smoothing_enabled(checked)
-        self.scene.update_base_style(self._item)
-    
-    def _on_smooth_clicked(self) -> None:
-        self._item.smooth_path()
-        self.scene.update_base_style(self._item)
-    
-    def _on_simplify_clicked(self) -> None:
-        self._item.simplify_path(1.0)
-        self.scene.update_base_style(self._item)
+class BrushSmoothingProperty:  # 已移除（占位）
+    pass
 
-
-class BrushEditProperty(PropertyComponent):
-    """画笔编辑属性组件"""
-    
-    def __init__(self, item, scene, undo_stack) -> None:
-        super().__init__(item, scene, undo_stack)
-        self._item: BrushPathItem = item
-        
-    def create_widget(self) -> QWidget:
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 编辑模式按钮
-        button_layout = QHBoxLayout()
-        self.edit_button = QPushButton("编辑路径")
-        self.edit_button.setCheckable(True)
-        self.edit_button.setChecked(self._item.is_editing())
-        self.edit_button.toggled.connect(self._on_edit_toggled)
-        
-        button_layout.addWidget(self.edit_button)
-        
-        # 路径信息
-        info_label = QLabel("路径信息:")
-        self.info_text = QLabel()
-        self._update_info()
-        
-        layout.addLayout(button_layout)
-        layout.addWidget(info_label)
-        layout.addWidget(self.info_text)
-        
-        return widget
-    
-    def _on_edit_toggled(self, checked: bool) -> None:
-        if checked:
-            self._item.start_editing()
-        else:
-            self._item.stop_editing()
-        self._update_info()
-        self.scene.update_base_style(self._item)
-    
-    def _update_info(self) -> None:
-        points = self._item.path_points()
-        info = f"点数: {len(points)}"
-        if len(points) >= 2:
-            # 计算路径长度
-            total_length = 0
-            for i in range(len(points) - 1):
-                dx = points[i+1].x() - points[i].x()
-                dy = points[i+1].y() - points[i].y()
-                total_length += (dx*dx + dy*dy) ** 0.5
-            info += f", 长度: {total_length:.1f}px"
-        
-        self.info_text.setText(info)
+class BrushEditProperty:  # 已移除（占位）
+    pass

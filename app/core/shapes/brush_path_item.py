@@ -34,6 +34,7 @@ class BrushPathItem(QGraphicsPathItem):
         
         # 性能优化：启用渲染缓存
         self.setCacheMode(self.CacheMode.ItemCoordinateCache)
+        self._cached_mode = self.cacheMode()
         self._control_points: List[QPointF] = []
         self._selected_control_point = -1
         
@@ -76,7 +77,8 @@ class BrushPathItem(QGraphicsPathItem):
         """设置路径关键点"""
         if not points:
             return
-        
+        # 路径与包围盒将改变
+        self.prepareGeometryChange()
         new_path = QPainterPath()
         new_path.moveTo(points[0])
         
@@ -131,15 +133,25 @@ class BrushPathItem(QGraphicsPathItem):
     
     def start_editing(self) -> None:
         """开始编辑模式"""
+        self.prepareGeometryChange()
         self._editing = True
         self._control_points = self.path_points()
+        # 编辑过程中禁用坐标缓存，避免缓存残留导致虚线框不消失
+        self._cached_mode = self.cacheMode()
+        self.setCacheMode(self.CacheMode.NoCache)
         self.update()
     
     def stop_editing(self) -> None:
         """结束编辑模式"""
+        self.prepareGeometryChange()
         self._editing = False
         self._control_points = []
         self._selected_control_point = -1
+        # 恢复缓存
+        try:
+            self.setCacheMode(self._cached_mode)
+        except Exception:
+            self.setCacheMode(self.CacheMode.ItemCoordinateCache)
         self.update()
     
     def is_editing(self) -> bool:

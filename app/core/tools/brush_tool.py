@@ -30,7 +30,7 @@ class BrushTool(BaseTool):
         self._on_committed: Optional[Callable[[BrushPathItem], None]] = None
         
         # 画笔属性
-        self._pen = QPen(QColor("#000000"), 3.0)
+        self._pen = QPen(QColor("#000000"), 8.0)
         self._brush = QBrush(QColor("#000000"))
         self._opacity = 1.0
         self._smoothing = True
@@ -123,7 +123,7 @@ class BrushTool(BaseTool):
     def _update_brush_properties(self) -> None:
         """根据画笔类型更新属性"""
         if self._brush_type == self.BrushType.PEN:
-            self._pen.setWidthF(3.0)
+            self._pen.setWidthF(8.0)
             self._pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             self._pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == self.BrushType.MARKER:
@@ -148,6 +148,11 @@ class BrushTool(BaseTool):
         """应用画笔样式到当前图元"""
         if self._current_item:
             pen = QPen(self._pen)
+            try:
+                # cosmetic 笔触宽度稳定，不随变换缩放造成像素抖动
+                pen.setCosmetic(True)
+            except Exception:
+                pass
             pen.setColor(pen.color())
             pen.setWidthF(pen.widthF())
             self._current_item.setPen(pen)
