@@ -30,7 +30,7 @@ class EraserTool(BaseTool):
         PATH_ERASER = "path_eraser"
         OBJECT_ERASER = "object_eraser"
 
-    def __init__(self, mode: str = EraserMode.PATH_ERASER) -> None:
+    def __init__(self, mode: str = EraserMode.OBJECT_ERASER) -> None:
         super().__init__()
         self._mode = mode
         self._active = False
@@ -154,8 +154,6 @@ class EraserTool(BaseTool):
     def _preview_boolean(self, item: QGraphicsPathItem, st: dict) -> None:
         try:
             base = st.get('path')
-            if base is None or base.isEmpty():
-                base = item.path()
             inv, ok = item.sceneTransform().inverted()
             if not ok:
                 return
@@ -163,8 +161,9 @@ class EraserTool(BaseTool):
             pen: QPen = st.get('pen') or item.pen()
 
             # base geometry
-            if st.get('mode', 'center') == 'center':
-                base = self._stroke_to_geometry(base, pen)
+            if base is None or st.get('mode', 'center') == 'center':
+                center_path = st.get('orig_path') or item.path()
+                base = self._stroke_to_geometry(center_path, pen)
 
             result = self._difference(base, local_eraser)
 
@@ -183,36 +182,38 @@ class EraserTool(BaseTool):
     # ---------- finalize ----------
     def _finalize_erasing(self) -> None:
         items_to_remove: List[QGraphicsItem] = []
-        geometry_updates: List[UpdateGeometryCommand] = []
+        geometry_updates_payload: List[dict] = []
         if self._mode == self.EraserMode.PATH_ERASER:
             for item, st in list(self._affected.items()):
                 try:
-                    base = st.get('path') or item.path()
+                    base = st.get('path')
                     inv, ok = item.sceneTransform().inverted()
                     if not ok or self._eraser_path is None:
                         continue
                     local_eraser = inv.map(self._eraser_path)
                     pen: QPen = st.get('pen') or item.pen()
-                    if st.get('mode', 'center') == 'center':
-                        base = self._stroke_to_geometry(base, pen)
+                    if base is None or st.get('mode', 'center') == 'center':
+                        center_path = st.get('orig_path') or item.path()
+                        base = self._stroke_to_geometry(center_path, pen)
                     result = self._difference(base, local_eraser)
                     if result.isEmpty():
                         items_to_remove.append(item)
                     else:
-                        # 记录可撤销更新
-                        old_path = item.path()
-                        old_pen = item.pen()
-                        old_brush = item.brush()
-                        new_path = result
-                        new_pen = QPen(Qt.PenStyle.NoPen)
-                        new_brush = QBrush(pen.color())
-                        geometry_updates.append(
-                            UpdateGeometryCommand(item, old_path, new_path, old_pen, new_pen, old_brush, new_brush, text="擦除")
-                        )
-                        # 立即应用以得到正确的后续几何（但通过命令栈管理撤销/重做）
-                        item.setPath(new_path)
-                        item.setPen(new_pen)
-                        item.setBrush(new_brush)
+                        # 记录可撤销更新载荷（由上层推入 undo 栈）
+                        geometry_updates_payload.append({
+                            'item': item,
+                            'old_path': st.get('orig_path') or item.path(),
+                            'new_path': result,
+                            'old_pen': st.get('orig_pen') or item.pen(),
+                            'new_pen': QPen(Qt.PenStyle.NoPen),
+                            'old_brush': st.get('orig_brush') or item.brush(),
+                            'new_brush': QBrush(pen.color()),
+                            'text': '擦除'
+                        })
+                        # 直接应用新几何以呈现最终效果
+                        item.setPath(result)
+                        item.setPen(Qt.PenStyle.NoPen)
+                        item.setBrush(QBrush(pen.color()))
                         st['path'] = result
                         st['mode'] = 'geometry'
                         st['pen'] = pen
@@ -221,24 +222,9 @@ class EraserTool(BaseTool):
         else:
             items_to_remove.extend(list(self._erased_items))
 
-        # 先发出删除项（对象橡皮擦或路径被完全擦除）
-        if self._on_committed and items_to_remove:
-            self._on_committed(items_to_remove)
-
-        # 将几何更新压入撤销栈
-        try:
-            from app.ui.main_window import MainWindow  # type: ignore
-            # 获取全局 undo_stack：通过场景的 views()[0] 找到 MainWindow 需要已有架构支持
-            # 更稳妥的做法：由 CanvasView 监听 eraser 完成并推命令；这里简单回退：直接在 item.scene().views()[0] 上找 undo_stack
-            for cmd in geometry_updates:
-                scene = cmd._item.scene()
-                if scene and scene.views():
-                    view = scene.views()[0]
-                    mw = view.window()  # type: ignore
-                    if hasattr(mw, 'undo_stack'):
-                        mw.undo_stack.push(cmd)
-        except Exception:
-            pass
+        # 将结果交给上层（CanvasView/MainWindow）统一处理与推入撤销栈
+        if self._on_committed:
+            self._on_committed({'deleted': items_to_remove, 'updates': geometry_updates_payload})
 
         # reset
         self._reset_state()
@@ -262,7 +248,12 @@ class EraserTool(BaseTool):
                 continue
             if it not in self._affected:
                 self._affected[it] = {
-                    'path': it.path(),
+                    # 原始状态（用于撤销）
+                    'orig_path': it.path(),
+                    'orig_pen': it.pen(),
+                    'orig_brush': it.brush(),
+                    # 运行态（用于布尔运算与预览）
+                    'path': None,
                     'mode': 'center',
                     'pen': it.pen()
                 }

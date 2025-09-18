@@ -153,6 +153,11 @@ class CanvasView(QGraphicsView):
             brush_type = name.replace("brush_", "")
             self._brush_tool.set_brush_type(brush_type)
             self._tool = self._brush_tool
+            # 切换到画笔时，隐藏并清理橡皮擦预览
+            try:
+                self._eraser_tool.cancel(self.scene())
+            except Exception:
+                pass
         elif name == "eraser":
             self._tool = self._eraser_tool
         else:
@@ -164,15 +169,40 @@ class CanvasView(QGraphicsView):
         item.setSelected(True)
         self.shapeCommitted.emit(item)
     
-    def _on_eraser_completed(self, erased_items):
-        """橡皮擦完成回调"""
-        # 橡皮擦完成后，清理场景并发出信号
-        for item in erased_items:
-            if item.scene():
-                item.scene().removeItem(item)
-        # 发出删除信号，用于撤销/重做（逐个发出）
-        for item in erased_items:
-            self.deleteRequested.emit(item)
+    def _on_eraser_completed(self, payload):
+        """橡皮擦完成回调：payload = {'deleted': [...], 'updates': [...]}"""
+        try:
+            deleted = list(payload.get('deleted', [])) if isinstance(payload, dict) else []
+            updates = list(payload.get('updates', [])) if isinstance(payload, dict) else []
+        except Exception:
+            deleted, updates = [], []
+
+        # 先处理几何更新：确保第一步撤销就是还原擦除
+        try:
+            from app.core.commands.update_geometry_cmd import UpdateGeometryCommand
+            from app.core.commands.delete_shape_cmd import DeleteShapeCommand
+            mw = self.window()  # MainWindow
+            if hasattr(mw, 'undo_stack'):
+                us = mw.undo_stack  # type: ignore
+                # 将整个擦除会话打包为一个宏，用户一次撤销即可还原全部
+                us.beginMacro("擦除")
+                # 先推几何更新
+                for u in updates:
+                    us.push(UpdateGeometryCommand(
+                        u['item'], u['old_path'], u['new_path'],
+                        u['old_pen'], u['new_pen'], u['old_brush'], u['new_brush'],
+                        u.get('text', '更新几何')
+                    ))
+                # 再推删除命令
+                for item in deleted:
+                    # 不直接移除，交由命令 redo 执行
+                    us.push(DeleteShapeCommand(self.scene(), item))
+                us.endMacro()
+        except Exception:
+            # 退化路径：若无法访问撤销栈，至少执行删除
+            for item in deleted:
+                if item.scene():
+                    item.scene().removeItem(item)
 
     def _create_item_from_payload(self, data: dict, at_scene_pos: QPointF | None = None) -> None:
         from app.core.shapes.circle_item import CircleItem
