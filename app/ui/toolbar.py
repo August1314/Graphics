@@ -38,11 +38,11 @@ class ToolBar(QToolBar):
         self.action_ellipse = QAction(self._icons.get("circle"), "圆", self); self.action_ellipse.setCheckable(True); self.action_ellipse.setData("circle"); self.action_ellipse.setIconVisibleInMenu(True); self._group.addAction(self.action_ellipse)
         self.action_polygon = QAction(self._icons.get("polygon"), "多边形", self); self.action_polygon.setCheckable(True); self.action_polygon.setData("polygon"); self.action_polygon.setIconVisibleInMenu(True); self._group.addAction(self.action_polygon)
         
-        # 画笔动作
-        self.action_brush_pen = QAction(self._icons.get("brush"), "普通画笔", self); self.action_brush_pen.setCheckable(True); self.action_brush_pen.setData("brush_pen"); self.action_brush_pen.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_pen)
-        self.action_brush_marker = QAction(self._icons.get("brush"), "马克笔", self); self.action_brush_marker.setCheckable(True); self.action_brush_marker.setData("brush_marker"); self.action_brush_marker.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_marker)
-        self.action_brush_calligraphy = QAction(self._icons.get("brush"), "书法笔", self); self.action_brush_calligraphy.setCheckable(True); self.action_brush_calligraphy.setData("brush_calligraphy"); self.action_brush_calligraphy.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_calligraphy)
-        self.action_brush_spray = QAction(self._icons.get("brush"), "喷枪", self); self.action_brush_spray.setCheckable(True); self.action_brush_spray.setData("brush_spray"); self.action_brush_spray.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_spray)
+        # 画笔动作（使用独立图标）
+        self.action_brush_pen = QAction(self._icons.get("brush_pen"), "普通画笔", self); self.action_brush_pen.setCheckable(True); self.action_brush_pen.setData("brush_pen"); self.action_brush_pen.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_pen)
+        self.action_brush_marker = QAction(self._icons.get("brush_marker"), "马克笔", self); self.action_brush_marker.setCheckable(True); self.action_brush_marker.setData("brush_marker"); self.action_brush_marker.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_marker)
+        self.action_brush_calligraphy = QAction(self._icons.get("brush_calligraphy"), "书法笔", self); self.action_brush_calligraphy.setCheckable(True); self.action_brush_calligraphy.setData("brush_calligraphy"); self.action_brush_calligraphy.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_calligraphy)
+        self.action_brush_spray = QAction(self._icons.get("brush_spray"), "喷枪", self); self.action_brush_spray.setCheckable(True); self.action_brush_spray.setData("brush_spray"); self.action_brush_spray.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_spray)
         
         # 橡皮擦动作
         self.action_eraser = QAction(self._icons.get("eraser"), "橡皮擦", self); self.action_eraser.setCheckable(True); self.action_eraser.setData("eraser"); self.action_eraser.setIconVisibleInMenu(True); self._group.addAction(self.action_eraser)

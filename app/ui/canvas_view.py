@@ -185,8 +185,6 @@ class CanvasView(QGraphicsView):
         # 更新画布光标为对应工具图标
         try:
             key = name if name else "select"
-            if key.startswith("brush_"):
-                key = "brush"
             ic = self._cursor_icons.get(key, 28)
             pm = ic.pixmap(28, 28)
             self.setCursor(QCursor(pm, pm.width() // 2, pm.height() // 2))

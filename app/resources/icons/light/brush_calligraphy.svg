@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 毛笔柄（微弯） -->
+  <path d="M4 20 C7 19 9 17 10.5 15"/>
+  <!-- 笔毫过渡（箍） -->
+  <path d="M10.5 15 L14.2 11.3"/>
+  <!-- 毛笔笔头（叶形） -->
+  <path d="M14.2 11.3 C16.8 9.0 18.8 9.6 20 11.2 C18.6 12.6 17.0 13.2 14.8 12.2 Z"/>
+</svg>

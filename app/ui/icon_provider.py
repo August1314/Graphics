@@ -27,7 +27,13 @@ class IconProvider:
             "rect": "rect.svg",
             "circle": "circle.svg",
             "polygon": "polygon.svg",
+            # 画笔系列
             "brush": "brush.svg",
+            "brush_pen": "brush_pen.svg",
+            "brush_marker": "brush_marker.svg",
+            "brush_calligraphy": "brush_calligraphy.svg",
+            "brush_spray": "brush_spray.svg",
+            # 其他
             "eraser": "eraser.svg",
         }
 
@@ -36,7 +42,8 @@ class IconProvider:
 
     def get(self, name: str, size: int = 24) -> QIcon:
         # 1) 尝试本地 SVG 资源
-        fname = self._name_map.get(name if not name.startswith("brush_") else "brush")
+        # 允许为不同 brush 变体提供独立图标，不再强制折叠为 brush
+        fname = self._name_map.get(name)
         if fname:
             theme_dir = self._base_dir / ("dark" if self._theme == "dark" else "light")
             svg_path = theme_dir / fname

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 笔身 -->
+  <path d="M4 18 L14.5 7.5"/>
+  <!-- 金属握位 -->
+  <path d="M12.8 9.2 L14.8 11.2"/>
+  <!-- 笔尖（三角形） -->
+  <path d="M15.2 6.8 L19 3.8 L17.2 7.6 Z"/>
+</svg>
