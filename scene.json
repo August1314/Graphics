@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "canvas": {
+    "width": 0,
+    "height": 0
+  },
+  "shapes": [
+    {
+      "type": "circle",
+      "cx": 409.0,
+      "cy": 223.0,
+      "r": 87.32124598286491,
+      "pen": {
+        "color": "#ffa8dc47",
+        "width": 3.0,
+        "style": 1
+      }
+    },
+    {
+      "type": "rect",
+      "x": 590.0,
+      "y": 283.0,
+      "width": 163.0,
+      "height": 60.0,
+      "pen": {
+        "color": "#ff333333",
+        "width": 2.0,
+        "style": 1
+      }
+    },
+    {
+      "type": "line",
+      "x1": 349.0,
+      "y1": 279.0,
+      "x2": 371.0,
+      "y2": 388.0,
+      "pen": {
+        "color": "#ff333333",
+        "width": 2.0,
+        "style": 1
+      }
+    }
+  ]
+}

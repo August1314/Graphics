@@ -11,14 +11,14 @@ from app.ui.main_window import MainWindow
 
 def main() -> int:
     app = QApplication(sys.argv)
-    # 高 DPI 支持
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-    # 应用 Material 主题（深色），后续可切换 light_*.xml
+    # 应用 Material 主题（有效主题名，带兜底）
     try:
-        apply_stylesheet(app, theme='light_*.xml')
+        apply_stylesheet(app, theme='light_teal.xml')
     except Exception:
-        pass
+        try:
+            apply_stylesheet(app, theme='dark_teal.xml')
+        except Exception:
+            pass
     window = MainWindow()
     window.show()
     return app.exec()

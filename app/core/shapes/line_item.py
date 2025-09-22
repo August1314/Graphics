@@ -14,4 +14,8 @@ class LineItem(QGraphicsLineItem):
     def set_points(self, x1: float, y1: float, x2: float, y2: float) -> None:
         self.setLine(x1, y1, x2, y2)
 
+    @classmethod
+    def from_dict(cls, data: dict) -> 'LineItem':
+        return cls(float(data.get("x1", 0.0)), float(data.get("y1", 0.0)), float(data.get("x2", 0.0)), float(data.get("y2", 0.0)))
+
 

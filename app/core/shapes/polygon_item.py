@@ -18,4 +18,12 @@ class PolygonItem(QGraphicsPolygonItem):
     def set_polygon(self, points: list[QPointF]) -> None:
         self.setPolygon(QPolygonF(points))
 
+    @classmethod
+    def from_dict(cls, data: dict) -> 'PolygonItem':
+        pts = [QPointF(float(x), float(y)) for x, y in data.get("points", [])]
+        it = cls()
+        if pts:
+            it.set_polygon(pts)
+        return it
+
 

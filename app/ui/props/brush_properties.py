@@ -38,12 +38,15 @@ class BrushTypeProperty(QWidget):
         # 反向映射
         self.reverse_mapping = {v: k for k, v in self.type_mapping.items()}
         
-        # 设置当前值
+        # 先连接信号
+        self.type_combo.currentTextChanged.connect(self._on_type_changed)
+        
+        # 设置当前值（临时阻止信号，避免触发 _on_type_changed）
         current_type = self._item.brush_type()
         if current_type in self.reverse_mapping:
+            self.type_combo.blockSignals(True)
             self.type_combo.setCurrentText(self.reverse_mapping[current_type])
-        
-        self.type_combo.currentTextChanged.connect(self._on_type_changed)
+            self.type_combo.blockSignals(False)
         
         layout.addWidget(type_label)
         layout.addWidget(self.type_combo)
@@ -51,7 +54,18 @@ class BrushTypeProperty(QWidget):
     def _on_type_changed(self, text: str) -> None:
         if text in self.type_mapping:
             brush_type = self.type_mapping[text]
+            # 如果是从加载来的对象，不要调用 set_brush_type
+            if hasattr(self._item, '_loaded_from_dict') and self._item._loaded_from_dict:
+                print(f"DEBUG: _on_type_changed 跳过 set_brush_type，因为是从加载来的对象")
+                return
+            
+            # 保存当前宽度，避免被 _update_brush_style 覆盖
+            current_width = self._item.pen().widthF()
             self._item.set_brush_type(brush_type)
+            # 恢复宽度
+            pen = self._item.pen()
+            pen.setWidthF(current_width)
+            self._item.setPen(pen)
             self._item.update()
             self.scene.update_base_style(self._item)
 

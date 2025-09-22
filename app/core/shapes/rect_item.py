@@ -15,4 +15,8 @@ class RectItem(QGraphicsRectItem):
     def set_geometry(self, x: float, y: float, w: float, h: float) -> None:
         self.setRect(x, y, w, h)
 
+    @classmethod
+    def from_dict(cls, data: dict) -> 'RectItem':
+        return cls(float(data.get("x", 0.0)), float(data.get("y", 0.0)), float(data.get("width", 0.0)), float(data.get("height", 0.0)))
+
 

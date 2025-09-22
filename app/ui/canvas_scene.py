@@ -53,11 +53,14 @@ class CanvasScene(QGraphicsScene):
             p = item.pen()
             base_color = item.data(self._DATA_BASE_COLOR) or p.color()
             base_width = float(item.data(self._DATA_BASE_WIDTH) or p.widthF())
+            print(f"DEBUG: _highlight_style 被调用，基础宽度: {base_width}, 当前宽度: {p.widthF()}")
             # 加深颜色与加粗
             color = QColor(base_color)
             color = color.darker(125)
             p.setColor(color)
-            p.setWidthF(max(base_width * 1.5, base_width + 1.0))
+            new_width = max(base_width * 1.5, base_width + 1.0)
+            p.setWidthF(new_width)
+            print(f"DEBUG: 设置高亮宽度为: {new_width}")
             item.setPen(p)
 
     def _on_selection_changed(self) -> None:
@@ -65,6 +68,11 @@ class CanvasScene(QGraphicsScene):
         for item in self.items():
             if not (item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsSelectable):
                 continue
+            
+            # 跳过 BrushPathItem，因为它自己处理高亮效果
+            if item.__class__.__name__ == "BrushPathItem":
+                continue
+                
             # 每次选中时，以当前样式为基础样式
             if item.isSelected():
                 self._tag_base_style(item)

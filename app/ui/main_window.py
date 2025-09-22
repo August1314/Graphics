@@ -592,20 +592,10 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "保存为 JSON", "scene.json", "JSON 文件 (*.json)")
         if not path:
             return
-        # 先放置占位逻辑：后续接入 serializer
         try:
             import json
-            from datetime import datetime
-
-            data = {
-                "name": "scene-1",
-                "canvas": {"width": 1200, "height": 800, "zoom": 1, "pan": {"x": 0, "y": 0}},
-                "savedAt": datetime.now().isoformat(),
-                "shapes": [
-                    {"type": "rect", "x": 100, "y": 120, "width": 200, "height": 100, "strokeColor": "#00AA00", "strokeWidth": 3, "fillColor": "#FF0000"},
-                    {"type": "circle", "cx": 460, "cy": 260, "r": 60, "strokeColor": "#0066cc", "strokeWidth": 2}
-                ],
-            }
+            from app.core.serializer import dump
+            data = dump(self.scene)
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             self.statusBar().showMessage(f"已保存: {path}")
@@ -616,12 +606,18 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "加载 JSON", "", "JSON 文件 (*.json)")
         if not path:
             return
-        # 占位：后续替换为 serializer.load
         try:
             import json
-
+            from app.core.serializer import load
             with open(path, "r", encoding="utf-8") as f:
-                _ = json.load(f)
+                data = json.load(f)
+            # 清场（仅移除用户图元，保留可能的辅助项，这里简单清空）
+            for it in list(self.scene.items()):
+                try:
+                    self.scene.removeItem(it)
+                except Exception:
+                    pass
+            load(data, self.scene)
             self.statusBar().showMessage(f"已加载: {path}")
         except Exception as e:
             QMessageBox.critical(self, "加载失败", str(e))

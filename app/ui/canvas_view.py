@@ -50,6 +50,8 @@ class CanvasView(QGraphicsView):
         self._eraser_tool.on_committed(self._on_eraser_completed)
         self._dragged_item = None
         self._drag_start_pos: QPointF | None = None
+        # 记录一次拖动开始时所有选中项的初始位置，以支持多选移动撤销
+        self._drag_start_positions: dict | None = None
         self._pending_paste_payload: dict | None = None
         self._last_context_item = None
 
@@ -94,6 +96,10 @@ class CanvasView(QGraphicsView):
             if top_item is not None and top_item.isSelected():
                 self._dragged_item = top_item
                 self._drag_start_pos = top_item.pos()
+                # 记录所有选中项的原始位置（支持成组移动）
+                sel = list(self.scene().selectedItems())
+                if sel:
+                    self._drag_start_positions = {it: it.pos() for it in sel}
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):  # type: ignore[override]
@@ -131,10 +137,21 @@ class CanvasView(QGraphicsView):
         # 提交拖动命令
         if event.button() == Qt.LeftButton and self._dragged_item is not None:
             new_pos = self._dragged_item.pos()
-            if self._drag_start_pos is not None and (new_pos != self._drag_start_pos):
-                self.moveCommitted.emit(self._dragged_item, self._drag_start_pos, new_pos)
+            # 若记录了多选的起始位置，则为每个发生变化的项发送一次移动提交
+            if isinstance(self._drag_start_positions, dict) and self._drag_start_positions:
+                for it, oldp in list(self._drag_start_positions.items()):
+                    try:
+                        newp = it.pos()
+                    except Exception:
+                        continue
+                    if newp != oldp:
+                        self.moveCommitted.emit(it, oldp, newp)
+            else:
+                if self._drag_start_pos is not None and (new_pos != self._drag_start_pos):
+                    self.moveCommitted.emit(self._dragged_item, self._drag_start_pos, new_pos)
             self._dragged_item = None
             self._drag_start_pos = None
+            self._drag_start_positions = None
         super().mouseReleaseEvent(event)
 
     def set_tool(self, name: str) -> None:
@@ -162,11 +179,27 @@ class CanvasView(QGraphicsView):
             self._tool = self._eraser_tool
         else:
             self._tool = None
+        # 仅在“选择”工具下允许拖动；其他工具禁用图元移动，避免被视为“创建后的拖动”
+        try:
+            allow_move = (self._tool is None)
+            for it in list(self.scene().items()):
+                try:
+                    it.setFlag(it.GraphicsItemFlag.ItemIsMovable, allow_move)
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
     def _auto_select_item(self, item):
         # 清空当前选择并选中新建项
         self.scene().clearSelection()
         item.setSelected(True)
+        # 刚创建完成的图元只有在“选择”模式才允许拖动
+        try:
+            movable = (self._tool is None)
+            item.setFlag(item.GraphicsItemFlag.ItemIsMovable, movable)
+        except Exception:
+            pass
         self.shapeCommitted.emit(item)
     
     def _on_eraser_completed(self, payload):

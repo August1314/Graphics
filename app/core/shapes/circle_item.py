@@ -23,6 +23,13 @@ class CircleItem(QGraphicsEllipseItem):
         pos = self.pos()
         return (pos.x(), pos.y(), r)
 
+    @classmethod
+    def from_dict(cls, data: dict) -> 'CircleItem':
+        cx = float(data.get("cx", 0.0))
+        cy = float(data.get("cy", 0.0))
+        r = float(data.get("r", 0.0))
+        return cls(cx, cy, r)
+
     def paint(self, painter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:  # type: ignore[override]
         # 使用 cosmetic 笔，避免选中状态或缩放导致视觉变粗
         pen = QPen(self.pen())

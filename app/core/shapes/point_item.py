@@ -15,4 +15,8 @@ class PointItem(QGraphicsEllipseItem):
         self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
 
+    @classmethod
+    def from_dict(cls, data: dict) -> 'PointItem':
+        return cls(float(data.get("x", 0.0)), float(data.get("y", 0.0)), float(data.get("r", 3.0)))
+
 
