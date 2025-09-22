@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import QPoint, QPointF, Qt, QRectF, Signal, QMimeData
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtGui import QImage, QPainter, QCursor
 from PySide6.QtWidgets import QGraphicsView, QGraphicsScene, QMenu
 
 from app.core.tools.base_tool import BaseTool
@@ -14,6 +14,7 @@ from app.core.tools.rect_tool import RectTool
 from app.core.tools.polygon_tool import PolygonTool
 from app.core.tools.brush_tool import BrushTool
 from app.core.tools.eraser_tool import EraserTool
+from app.ui.icon_provider import IconProvider
 
 
 class CanvasView(QGraphicsView):
@@ -40,6 +41,8 @@ class CanvasView(QGraphicsView):
         self._polygon_tool = PolygonTool()
         self._brush_tool = BrushTool()
         self._eraser_tool = EraserTool()
+        # 光标图标提供器
+        self._cursor_icons = IconProvider("light")
         # 提交后自动选中新建的图元
         self._circle_tool.on_committed(self._auto_select_item)
         self._point_tool.on_committed(self._auto_select_item)
@@ -179,6 +182,16 @@ class CanvasView(QGraphicsView):
             self._tool = self._eraser_tool
         else:
             self._tool = None
+        # 更新画布光标为对应工具图标
+        try:
+            key = name if name else "select"
+            if key.startswith("brush_"):
+                key = "brush"
+            ic = self._cursor_icons.get(key, 28)
+            pm = ic.pixmap(28, 28)
+            self.setCursor(QCursor(pm, pm.width() // 2, pm.height() // 2))
+        except Exception:
+            self.setCursor(Qt.ArrowCursor)
         # 仅在“选择”工具下允许拖动；其他工具禁用图元移动，避免被视为“创建后的拖动”
         try:
             allow_move = (self._tool is None)
