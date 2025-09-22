@@ -14,6 +14,8 @@ class CanvasScene(QGraphicsScene):
 
         # 选择变化监听
         self.selectionChanged.connect(self._on_selection_changed)
+        # 防重入标记，避免在属性回写/样式切换过程中反复进入
+        self._in_sel_handler: bool = False
 
     # 自定义数据键保存原样式
     _DATA_BASE_COLOR = int(Qt.ItemDataRole.UserRole) + 1
@@ -67,20 +69,7 @@ class CanvasScene(QGraphicsScene):
             item.setPen(p)
 
     def _on_selection_changed(self) -> None:
-        # 遍历所有可选项，根据选中状态应用样式
-        for item in self.items():
-            if not (item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsSelectable):
-                continue
-            
-            # 跳过 BrushPathItem，因为它自己处理高亮效果
-            if item.__class__.__name__ == "BrushPathItem":
-                continue
-                
-            # 每次选中时，以当前样式为基础样式
-            if item.isSelected():
-                self._tag_base_style(item)
-                self._highlight_style(item)
-            else:
-                self._restore_style(item)
+        # 稳定性优先：临时关闭自动高亮逻辑，避免在属性回写/样式切换时触发原生崩溃
+        return
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QColor, QPen, QBrush
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QSpinBox, QDoubleSpinBox, QSlider, QComboBox, 
@@ -52,22 +53,44 @@ class BrushTypeProperty(QWidget):
         layout.addWidget(self.type_combo)
     
     def _on_type_changed(self, text: str) -> None:
+        # 调试：进入类型切换
+        try:
+            import sys
+            curw = float(self._item.pen().widthF()) if hasattr(self._item, 'pen') else -1
+            curst = int(self._item.pen().style()) if hasattr(self._item, 'pen') else -1
+            print(f"DEBUG: _on_type_changed enter text={text} width={curw} style={curst}")
+            sys.stdout.flush()
+        except Exception:
+            pass
         if text in self.type_mapping:
             brush_type = self.type_mapping[text]
             # 如果是从加载来的对象，不要调用 set_brush_type
             if hasattr(self._item, '_loaded_from_dict') and self._item._loaded_from_dict:
                 print(f"DEBUG: _on_type_changed 跳过 set_brush_type，因为是从加载来的对象")
                 return
-            
-            # 保存当前宽度，避免被 _update_brush_style 覆盖
-            current_width = self._item.pen().widthF()
-            self._item.set_brush_type(brush_type)
-            # 恢复宽度
-            pen = self._item.pen()
-            pen.setWidthF(current_width)
-            self._item.setPen(pen)
-            self._item.update()
-            self.scene.update_base_style(self._item)
+            def apply():
+                # 保存当前宽度，避免被 _update_brush_style 覆盖
+                current_width = self._item.pen().widthF()
+                self._item.set_brush_type(brush_type)
+                # 恢复宽度
+                pen = self._item.pen(); pen.setWidthF(current_width); self._item.setPen(pen)
+                self._item.update()
+                try:
+                    self.scene.blockSignals(True)
+                    self.scene.update_base_style(self._item)
+                finally:
+                    self.scene.blockSignals(False)
+                # 调试：应用完成
+                try:
+                    import sys
+                    curw2 = float(self._item.pen().widthF())
+                    curst2 = int(self._item.pen().style())
+                    print(f"DEBUG: _on_type_changed applied type={brush_type} width={curw2} style={curst2}")
+                    sys.stdout.flush()
+                except Exception:
+                    pass
+            # 推迟到事件循环空闲时执行，避开当前信号栈
+            QTimer.singleShot(0, apply)
 
 
 class BrushStrokeProperty(QWidget):
@@ -101,15 +124,15 @@ class BrushStrokeProperty(QWidget):
         self.width_spin.setSingleStep(0.5)
         self.width_spin.setValue(self._item.pen().widthF())
         self._last_width = float(self._item.pen().widthF())
-        self.width_spin.valueChanged.connect(self._on_width_changed)
-        # 提交时入撤销栈
-        try:
-            self.width_spin.editingFinished.connect(self._commit_width)
-        except Exception:
-            pass
+        # 改为显式“应用”提交，避免与样式切换在同一事件周期内交错触发
+        # self.width_spin.valueChanged.connect(self._on_width_changed)
         
         width_layout.addWidget(width_label)
         width_layout.addWidget(self.width_spin)
+        self.width_apply_btn = QPushButton("应用")
+        self.width_apply_btn.setFixedWidth(56)
+        self.width_apply_btn.clicked.connect(self._commit_width)
+        width_layout.addWidget(self.width_apply_btn)
         
         # 笔触样式
         style_layout = QHBoxLayout()
@@ -164,29 +187,71 @@ class BrushStrokeProperty(QWidget):
                 pass
     
     def _on_width_changed(self, value: float) -> None:
-        pen = self._item.pen()
-        pen.setWidthF(value)
-        self._item.setPen(pen)
-        self.scene.update_base_style(self._item)
+        # 已禁用即时回写，保留方法以兼容旧连接
+        pass
 
     def _commit_width(self) -> None:
+        # 调试：进入提交宽度
+        try:
+            import sys
+            print(f"DEBUG: _commit_width enter curPenW={self._item.pen().widthF()} spin={self.width_spin.value()} style={int(self._item.pen().style())}")
+            sys.stdout.flush()
+        except Exception:
+            pass
+        if not self.isVisible():
+            return
         new_w = float(self.width_spin.value())
         old_w = float(self._last_width)
         if abs(new_w - old_w) < 1e-6:
             return
         def do():
-            p = self._item.pen(); p.setWidthF(new_w); self._item.setPen(p); self.scene.update_base_style(self._item)
+            p = self._item.pen(); p.setWidthF(new_w); self._item.setPen(p)
+            try:
+                self.scene.blockSignals(True)
+                self.scene.update_base_style(self._item)
+            finally:
+                self.scene.blockSignals(False)
+            try:
+                import sys
+                print(f"DEBUG: _commit_width done new={new_w}")
+                sys.stdout.flush()
+            except Exception:
+                pass
         def undo():
-            p = self._item.pen(); p.setWidthF(old_w); self._item.setPen(p); self.scene.update_base_style(self._item)
+            p = self._item.pen(); p.setWidthF(old_w); self._item.setPen(p)
+            try:
+                self.scene.blockSignals(True)
+                self.scene.update_base_style(self._item)
+            finally:
+                self.scene.blockSignals(False)
         self.undo_stack.push(UpdateStyleCommand.make("修改笔触宽度", do, undo))
         self._last_width = new_w
     
     def _on_style_changed(self, text: str) -> None:
+        # 调试：进入样式切换
+        try:
+            import sys
+            print(f"DEBUG: _on_style_changed enter text={text} width={self._item.pen().widthF()} style={int(self._item.pen().style())}")
+            sys.stdout.flush()
+        except Exception:
+            pass
         if text in self.style_mapping:
-            pen = self._item.pen()
-            pen.setStyle(self.style_mapping[text])
-            self._item.setPen(pen)
-            self.scene.update_base_style(self._item)
+            def apply():
+                pen = self._item.pen()
+                pen.setStyle(self.style_mapping[text])
+                self._item.setPen(pen)
+                try:
+                    self.scene.blockSignals(True)
+                    self.scene.update_base_style(self._item)
+                finally:
+                    self.scene.blockSignals(False)
+                try:
+                    import sys
+                    print(f"DEBUG: _on_style_changed applied text={text} width={self._item.pen().widthF()} style={int(self._item.pen().style())}")
+                    sys.stdout.flush()
+                except Exception:
+                    pass
+            QTimer.singleShot(0, apply)
 
 
 class BrushOpacityProperty(QWidget):
