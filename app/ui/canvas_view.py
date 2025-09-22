@@ -57,6 +57,8 @@ class CanvasView(QGraphicsView):
         self._drag_start_positions: dict | None = None
         self._pending_paste_payload: dict | None = None
         self._last_context_item = None
+        # 橡皮框选择状态标记，供主窗抑制属性面板在框选时的回写
+        self._rubber_selecting: bool = False
 
     def wheelEvent(self, event):  # type: ignore[override]
         delta = event.angleDelta().y()
@@ -93,7 +95,7 @@ class CanvasView(QGraphicsView):
                 self._tool.on_press(self.scene(), scene_pos, event)
                 event.accept()
                 return
-        # 记录拖动起点（选择模式下拖动选中图元）
+        # 记录拖动起点（选择模式下拖动选中图元）或进入框选
         if event.button() == Qt.LeftButton and self._tool is None:
             top_item = self.itemAt(event.pos())
             if top_item is not None and top_item.isSelected():
@@ -103,6 +105,12 @@ class CanvasView(QGraphicsView):
                 sel = list(self.scene().selectedItems())
                 if sel:
                     self._drag_start_positions = {it: it.pos() for it in sel}
+                # 为了确保拖动命中项而不是拉框，按住期间禁用 RubberBand
+                self.setDragMode(QGraphicsView.NoDrag)
+            else:
+                # 命中空白或命中未选中项：进入橡皮框扩选
+                self._rubber_selecting = True
+                self.setDragMode(QGraphicsView.RubberBandDrag)
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):  # type: ignore[override]
@@ -119,8 +127,11 @@ class CanvasView(QGraphicsView):
             event.accept()
             return
         super().mouseMoveEvent(event)
-        # 非绘制状态下，移动可能拖动已选中的图元，通知属性面板刷新
-        if event.buttons() & Qt.LeftButton and self.scene().selectedItems():
+        # 若正在进行橡皮框，持续标记，防止中途被清除
+        if (event.buttons() & Qt.LeftButton) and self.dragMode() == QGraphicsView.RubberBandDrag:
+            self._rubber_selecting = True
+        # 仅在“正在拖动选中图元”时才通知几何变化，避免矩形/圆在框选时被联动修改
+        if (event.buttons() & Qt.LeftButton) and (self._dragged_item is not None):
             self.selectionGeometryChanged.emit()
 
     def mouseReleaseEvent(self, event):  # type: ignore[override]
@@ -142,20 +153,41 @@ class CanvasView(QGraphicsView):
             new_pos = self._dragged_item.pos()
             # 若记录了多选的起始位置，则为每个发生变化的项发送一次移动提交
             if isinstance(self._drag_start_positions, dict) and self._drag_start_positions:
+                # 将一次多选移动合并为一个撤销宏，确保一次撤销全部回位
+                any_moved = False
+                us = None
+                try:
+                    mw = self.window()
+                    if hasattr(mw, 'undo_stack'):
+                        us = mw.undo_stack  # type: ignore[attr-defined]
+                        us.beginMacro("移动")
+                except Exception:
+                    us = None
                 for it, oldp in list(self._drag_start_positions.items()):
                     try:
                         newp = it.pos()
                     except Exception:
                         continue
                     if newp != oldp:
+                        any_moved = True
                         self.moveCommitted.emit(it, oldp, newp)
+                try:
+                    if us is not None:
+                        us.endMacro()
+                except Exception:
+                    pass
             else:
                 if self._drag_start_pos is not None and (new_pos != self._drag_start_pos):
                     self.moveCommitted.emit(self._dragged_item, self._drag_start_pos, new_pos)
             self._dragged_item = None
             self._drag_start_pos = None
             self._drag_start_positions = None
+            # 释放后恢复拉框选择
+            self.setDragMode(QGraphicsView.RubberBandDrag)
         super().mouseReleaseEvent(event)
+        # 框选结束
+        if event.button() == Qt.LeftButton:
+            self._rubber_selecting = False
 
     def set_tool(self, name: str) -> None:
         if name in ("circle", "ellipse"):

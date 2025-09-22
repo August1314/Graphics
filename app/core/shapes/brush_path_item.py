@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QPen, QBrush, QColor, QPainterPath
+from PySide6.QtGui import QPen, QBrush, QColor, QPainterPath, QLinearGradient, QPainter
 from PySide6.QtWidgets import QGraphicsPathItem, QStyleOptionGraphicsItem, QWidget
 
 from app.core.shapes.base_item import BaseShapeItem
@@ -37,15 +37,16 @@ class BrushPathItem(QGraphicsPathItem):
         self._cached_mode = self.cacheMode()
         self._control_points: List[QPointF] = []
         self._selected_control_point = -1
+        # 组合模式（在 paint 中应用）
+        self._compose_mode = None
+        # 喷枪离屏图与绘制区域（目标矩形与源裁剪矩形）
+        self._spray_image = None
+        self._spray_rect = None
+        self._spray_src_rect = None
     
     def setPen(self, pen: QPen) -> None:
-        """重写 setPen 方法以便调试宽度变化"""
-        import traceback
+        """重写 setPen，去除大量调试输出以避免性能问题"""
         super().setPen(pen)
-        print(f"DEBUG: setPen 被调用，新宽度: {pen.widthF()}")
-        print(f"DEBUG: setPen 调用栈:")
-        for line in traceback.format_stack()[-3:-1]:
-            print(f"  {line.strip()}")
         
     def brush_type(self) -> str:
         """获取画笔类型"""
@@ -186,7 +187,7 @@ class BrushPathItem(QGraphicsPathItem):
         original_pen = self.pen()
         
         if self.isSelected():
-            print(f"DEBUG: paint 方法中对象被选中，当前宽度: {original_pen.widthF()}")
+            #print(f"DEBUG: paint 方法中对象被选中，当前宽度: {original_pen.widthF()}")
             # 动态应用高亮效果
             highlight_pen = QPen(original_pen)
             color = highlight_pen.color().darker(125)
@@ -197,8 +198,23 @@ class BrushPathItem(QGraphicsPathItem):
         else:
             painter.setPen(original_pen)
         
-        painter.setBrush(self.brush())
-        painter.drawPath(self.path())
+        # 应用自定义合成模式（如马克笔 Multiply）
+        if self._compose_mode is not None:
+            try:
+                painter.setCompositionMode(self._compose_mode)
+            except Exception:
+                pass
+        if self._brush_type == "spray" and self._spray_image is not None and self._spray_rect is not None:
+            try:
+                if self._spray_src_rect is not None:
+                    painter.drawImage(self._spray_rect, self._spray_image, self._spray_src_rect)
+                else:
+                    painter.drawImage(self._spray_rect, self._spray_image)
+            except Exception:
+                pass
+        else:
+            painter.setBrush(self.brush())
+            painter.drawPath(self.path())
         
         # 如果需要绘制选中边框
         if self.isSelected():
@@ -301,22 +317,58 @@ class BrushPathItem(QGraphicsPathItem):
             self.setPen(pen)
             return
         
+        # 默认合成模式
+        try:
+            self._compose_mode = QPainter.CompositionMode_SourceOver
+        except Exception:
+            self._compose_mode = None
+
         if self._brush_type == "pen":
             pen.setWidthF(8.0)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            try:
+                pen.setBrush(QBrush(pen.color()))
+            except Exception:
+                pass
         elif self._brush_type == "marker":
             pen.setWidthF(8.0)
             pen.setCapStyle(Qt.PenCapStyle.SquareCap)
             pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+            # 笔触使用纵向线性渐变，营造边缘渗色
+            try:
+                w = max(1.0, pen.widthF())
+                grad = QLinearGradient(0, -w, 0, w)
+                c = pen.color()
+                edge = QColor(c); edge.setAlphaF(max(0.0, min(1.0, c.alphaF() * 0.6)))
+                mid = QColor(c); mid.setAlphaF(c.alphaF())
+                grad.setColorAt(0.0, edge)
+                grad.setColorAt(0.5, mid)
+                grad.setColorAt(1.0, edge)
+                pen.setBrush(QBrush(grad))
+            except Exception:
+                pass
+            try:
+                self._compose_mode = QPainter.CompositionMode_Multiply
+            except Exception:
+                pass
         elif self._brush_type == "calligraphy":
             pen.setWidthF(8.0)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            try:
+                pen.setBrush(QBrush(pen.color()))
+            except Exception:
+                pass
         elif self._brush_type == "spray":
             pen.setWidthF(8.0)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            # 喷枪使用填充点，不需要描边颜色：在工具中会切换为无描边
+            try:
+                pen.setBrush(QBrush(pen.color()))
+            except Exception:
+                pass
         elif self._brush_type == "eraser":
             pen.setColor(QColor("#FFFFFF"))
             pen.setWidthF(8.0)
@@ -326,6 +378,34 @@ class BrushPathItem(QGraphicsPathItem):
         self.setPen(pen)
         # 确保画笔路径始终不显示填充
         self.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+
+    # ---- 喷枪支持 ----
+    def set_spray_texture(self, image, rect) -> None:
+        try:
+            self._spray_image = image
+            self._spray_rect = rect
+            self._spray_src_rect = None
+            # 以原始矩形为路径（可能较大）
+            self.prepareGeometryChange()
+            tight = QPainterPath(); tight.addRect(self._spray_rect)
+            self.setPath(tight)
+            # 取消描边
+            p = self.pen(); p.setColor(QColor(0,0,0,0)); p.setWidthF(0.0); self.setPen(p)
+        except Exception:
+            pass
+
+    def set_spray_texture_fast(self, image, full_rect, tight_rect, src_rect) -> None:
+        """高效设置喷枪纹理：不扫描像素，直接用传入的紧致矩形与源裁剪。"""
+        try:
+            self._spray_image = image
+            self._spray_rect = tight_rect
+            self._spray_src_rect = src_rect
+            self.prepareGeometryChange()
+            tight = QPainterPath(); tight.addRect(tight_rect)
+            self.setPath(tight)
+            p = self.pen(); p.setColor(QColor(0,0,0,0)); p.setWidthF(0.0); self.setPen(p)
+        except Exception:
+            pass
     
     def _douglas_peucker(self, points: List[QPointF], tolerance: float) -> List[QPointF]:
         """道格拉斯-普克算法简化路径"""

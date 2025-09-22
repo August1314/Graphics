@@ -33,6 +33,15 @@ class RectGeomProperty(QWidget):
             s.blockSignals(True); s.setValue(v); s.blockSignals(False)
 
     def _apply(self) -> None:
+        # 框选进行中不回写，避免越选越大
+        try:
+            from app.ui.main_window import MainWindow
+            # 通过父层级拿到 MainWindow（若存在）
+            w = self.window()
+            if isinstance(w, MainWindow) and getattr(w.view, "_rubber_selecting", False):
+                return
+        except Exception:
+            pass
         r = self.item.rect()
         old = (r.x(), r.y(), r.width(), r.height())
         x, y, w, h = self.x.value(), self.y.value(), max(0.1, self.w.value()), max(0.1, self.h.value())

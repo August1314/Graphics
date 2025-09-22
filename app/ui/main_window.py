@@ -270,6 +270,12 @@ class MainWindow(QMainWindow):
         return None
 
     def _on_scene_selection_changed(self) -> None:
+        # 框选过程中不刷新属性面板，避免在画笔存在时触发回写导致圆/矩形尺寸被改动
+        try:
+            if getattr(self.view, "_rubber_selecting", False):
+                return
+        except Exception:
+            pass
         circle = self._get_selected_circle()
         if circle is not None:
             self.property_panel.set_mode("circle")
@@ -292,6 +298,12 @@ class MainWindow(QMainWindow):
         # 矩形
         rect = self._get_selected_rect()
         if rect is not None:
+            # 框选进行中不刷新，以免几何被回写
+            try:
+                if getattr(self.view, "_rubber_selecting", False):
+                    return
+            except Exception:
+                pass
             self.property_panel.build_for(rect, "rect", self.scene, self.undo_stack)
             self.property_panel.set_enabled(True)
             return
@@ -313,6 +325,12 @@ class MainWindow(QMainWindow):
         self.property_panel.set_enabled(False)
 
     def _on_center_changed(self, cx: float, cy: float) -> None:
+        # 框选过程中忽略属性回写，避免圆在框选时被误改
+        try:
+            if getattr(self.view, "_rubber_selecting", False):
+                return
+        except Exception:
+            pass
         circle = self._get_selected_circle()
         if circle is None:
             # Point
@@ -334,6 +352,12 @@ class MainWindow(QMainWindow):
         self.undo_stack.push(UpdateStyleCommand.make("修改中心", apply, revert))
 
     def _on_radius_changed(self, r: float) -> None:
+        # 框选过程中忽略属性回写
+        try:
+            if getattr(self.view, "_rubber_selecting", False):
+                return
+        except Exception:
+            pass
         circle = self._get_selected_circle()
         if circle is None:
             # Point 半径
