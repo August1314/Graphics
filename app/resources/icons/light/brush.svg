@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <!-- 刷子把手 -->
+  <path d="M5 19 C7.2 17.6 8.2 16 9 14"/>
+  <!-- 金属卡箍 -->
+  <rect x="10.5" y="10" width="4" height="3" rx="0.6" transform="rotate(-40 10.5 10)"/>
+  <!-- 扁平刷头 -->
+  <path d="M13.5 8 L19.5 6 L20.6 7.1 L18 12 L12.8 10.4 Z"/>
+</svg>

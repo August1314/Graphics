@@ -1,0 +1,86 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Linker files
+*.ilk
+
+# Debugger Files
+*.pdb
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# debug information files
+*.dwo
+
+#Mac
+*.Ds_store
+.DS_Store
+
+# Python
+**/__pycache__/
+__pycache__/
+**/__pycache__/**
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+.venv/
+pip-wheel-metadata/
+dist/
+build/
+site/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.pyc
+
+# IDE/Editor
+.idea/
+.vscode/
+*.code-workspace
+
+# Logs/Temp
+*.log
+logs/
+tmp/
+*.swp
+*.swo
+
+# Qt / PySide
+*.qmlc
+*.jsc
+*.qrc.depends
+*.pro.user*
+*.qmake.stash
