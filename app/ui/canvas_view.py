@@ -308,15 +308,18 @@ class CanvasView(QGraphicsView):
 
     def _create_item_from_payload(self, data: dict, at_scene_pos: QPointF | None = None) -> None:
         from app.core.shapes.circle_item import CircleItem
-        from PySide6.QtGui import QColor, QPen, QBrush
-        if data.get("type") == "circle":
-            cx = float(data.get("cx", 0))
-            cy = float(data.get("cy", 0))
-            r = float(data.get("r", 10))
+        from app.core.shapes.line_item import LineItem
+        from app.core.shapes.rect_item import RectItem
+        from app.core.shapes.polygon_item import PolygonItem
+        from app.core.shapes.brush_path_item import BrushPathItem
+        from PySide6.QtGui import QColor, QPen, QBrush, QPainterPath
+        t = data.get("type")
+        if t == "circle":
+            cx = float(data.get("cx", 0)); cy = float(data.get("cy", 0)); r = float(data.get("r", 10))
             if at_scene_pos is not None:
                 cx, cy = at_scene_pos.x(), at_scene_pos.y()
             item = CircleItem(cx, cy, r)
-            pen = QPen(QColor(data.get("stroke", "#0066cc")), float(data.get("width", 2.0)))
+            pen = QPen(QColor(data.get("stroke", "#0066cc")), float(data.get("width", data.get("strokeWidth", 2.0))))
             try:
                 from PySide6.QtCore import Qt as _Qt
                 pen.setStyle(_Qt.PenStyle(int(data.get("style", 1))))
@@ -326,53 +329,148 @@ class CanvasView(QGraphicsView):
             item.setBrush(QBrush(QColor(data.get("fill", "#00000000"))))
             item.setOpacity(float(data.get("opacity", 1.0)))
             self.scene().addItem(item)
-            self.scene().clearSelection()
+        elif t == "line":
+            x1 = float(data.get("x1", 0)); y1 = float(data.get("y1", 0)); x2 = float(data.get("x2", 0)); y2 = float(data.get("y2", 0))
+            if at_scene_pos is not None:
+                dx = at_scene_pos.x() - x1; dy = at_scene_pos.y() - y1
+                x1 += dx; y1 += dy; x2 += dx; y2 += dy
+            item = LineItem(x1, y1, x2, y2)
+            pen = QPen(QColor(data.get("stroke", "#333333")), float(data.get("width", data.get("strokeWidth", 2.0))))
+            try:
+                from PySide6.QtCore import Qt as _Qt
+                pen.setStyle(_Qt.PenStyle(int(data.get("style", 1))))
+            except Exception:
+                pass
+            item.setPen(pen)
+            self.scene().addItem(item)
+        elif t == "rect":
+            # 兼容不同键名：rect_w/rect_h 或 w/h 或 width/height（几何）
+            gw = data.get("rect_w", data.get("w", data.get("width", 10)))
+            gh = data.get("rect_h", data.get("h", data.get("height", 10)))
+            x = float(data.get("x", 0)); y = float(data.get("y", 0)); w = float(gw); h = float(gh)
+            if at_scene_pos is not None:
+                x, y = at_scene_pos.x(), at_scene_pos.y()
+            item = RectItem(x, y, w, h)
+            penw = float(data.get("strokeWidth", data.get("penWidth", data.get("pw", data.get("width", 2.0)))))
+            pen = QPen(QColor(data.get("stroke", "#333333")), penw)
+            try:
+                from PySide6.QtCore import Qt as _Qt
+                pen.setStyle(_Qt.PenStyle(int(data.get("style", 1))))
+            except Exception:
+                pass
+            item.setPen(pen)
+            item.setBrush(QBrush(QColor(data.get("fill", "#00000000"))))
+            item.setOpacity(float(data.get("opacity", 1.0)))
+            self.scene().addItem(item)
+        elif t == "polygon":
+            pts = [(float(x), float(y)) for x, y in data.get("points", [])]
+            if at_scene_pos is not None and pts:
+                dx = at_scene_pos.x() - pts[0][0]; dy = at_scene_pos.y() - pts[0][1]
+                pts = [(x + dx, y + dy) for x, y in pts]
+            item = PolygonItem()
+            from PySide6.QtCore import QPointF
+            item.set_polygon([QPointF(x, y) for x, y in pts])
+            pen = QPen(QColor(data.get("stroke", "#333333")), float(data.get("width", data.get("strokeWidth", 2.0))))
+            try:
+                from PySide6.QtCore import Qt as _Qt
+                pen.setStyle(_Qt.PenStyle(int(data.get("style", 1))))
+            except Exception:
+                pass
+            item.setPen(pen)
+            item.setBrush(QBrush(QColor(data.get("fill", "#00000000"))))
+            item.setOpacity(float(data.get("opacity", 1.0)))
+            self.scene().addItem(item)
+        elif t == "brush_path":
+            path_data = data.get("path", [])
+            path = QPainterPath()
+            for seg in path_data:
+                cmd = seg.get("cmd"); x = float(seg.get("x", 0)); y = float(seg.get("y", 0))
+                if cmd == "M":
+                    path.moveTo(x, y)
+                elif cmd == "L":
+                    path.lineTo(x, y)
+            if at_scene_pos is not None and not path.isEmpty():
+                dx = at_scene_pos.x() - path.elementAt(0).x; dy = at_scene_pos.y() - path.elementAt(0).y
+                path.translate(dx, dy)
+            item = BrushPathItem(path)
+            from PySide6.QtCore import Qt as _Qt
+            pen = QPen(QColor(data.get("stroke", "#000000")), float(data.get("width", data.get("strokeWidth", 3.0))))
+            pen.setStyle(_Qt.PenStyle(int(data.get("style", 1))))
+            item.setPen(pen)
+            item.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+            item.setOpacity(float(data.get("opacity", 1.0)))
+            self.scene().addItem(item)
+        else:
+            return
+        # 选中新建项并发出提交信号
+        self.scene().clearSelection()
+        try:
             item.setSelected(True)
-            self.shapeCommitted.emit(item)
+        except Exception:
+            pass
+        self.shapeCommitted.emit(item)
 
     def _build_payload_from_item(self, item) -> dict | None:
         try:
-            from PySide6.QtGui import QColor
+            from PySide6.QtGui import QColor, QPainterPath
+            from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsRectItem, QGraphicsPolygonItem, QGraphicsPathItem
             from app.core.shapes.circle_item import CircleItem
-            from PySide6.QtWidgets import QGraphicsEllipseItem
-            if isinstance(item, CircleItem):
-                cx, cy, r = item.center_radius()
+            # 圆/椭圆
+            if isinstance(item, CircleItem) or isinstance(item, QGraphicsEllipseItem):
+                if isinstance(item, CircleItem):
+                    cx, cy, r = item.center_radius()
+                else:
+                    rect = item.rect(); r = rect.width() / 2.0; pos = item.scenePos(); cx, cy = pos.x(), pos.y()
                 pen = item.pen(); brush = item.brush()
-                return {
-                    "type": "circle",
-                    "cx": cx, "cy": cy, "r": r,
-                    "stroke": pen.color().name(QColor.HexArgb),
-                    "width": pen.widthF(),
-                    "style": int(pen.style()),
-                    "fill": brush.color().name(QColor.HexArgb),
-                    "opacity": float(item.opacity()),
-                }
-            if isinstance(item, QGraphicsEllipseItem):
-                rect = item.rect(); r = rect.width() / 2.0
-                pos = item.scenePos(); pen = item.pen(); brush = item.brush()
-                return {
-                    "type": "circle",
-                    "cx": pos.x(), "cy": pos.y(), "r": r,
-                    "stroke": pen.color().name(QColor.HexArgb),
-                    "width": pen.widthF(),
-                    "style": int(pen.style()),
-                    "fill": brush.color().name(QColor.HexArgb),
-                    "opacity": float(item.opacity()),
-                }
+                return {"type": "circle", "cx": cx, "cy": cy, "r": r,
+                        "stroke": pen.color().name(QColor.HexArgb), "width": pen.widthF(), "style": int(pen.style()),
+                        "fill": brush.color().name(QColor.HexArgb), "opacity": float(item.opacity())}
+            # 直线
+            if isinstance(item, QGraphicsLineItem):
+                ln = item.line(); pen = item.pen()
+                return {"type": "line", "x1": ln.x1(), "y1": ln.y1(), "x2": ln.x2(), "y2": ln.y2(),
+                        "stroke": pen.color().name(QColor.HexArgb), "width": pen.widthF(), "style": int(pen.style()),
+                        "opacity": float(item.opacity())}
+            # 矩形
+            if isinstance(item, QGraphicsRectItem):
+                rect = item.rect(); pos = item.scenePos(); pen = item.pen(); brush = item.brush()
+                return {"type": "rect", "x": pos.x(), "y": pos.y(), "rect_w": rect.width(), "rect_h": rect.height(),
+                        "stroke": pen.color().name(QColor.HexArgb), "strokeWidth": pen.widthF(), "style": int(pen.style()),
+                        "fill": brush.color().name(QColor.HexArgb), "opacity": float(item.opacity())}
+            # 多边形
+            if isinstance(item, QGraphicsPolygonItem):
+                poly = item.polygon(); pen = item.pen(); brush = item.brush()
+                points = [(pt.x(), pt.y()) for pt in poly]
+                return {"type": "polygon", "points": points,
+                        "stroke": pen.color().name(QColor.HexArgb), "width": pen.widthF(), "style": int(pen.style()),
+                        "fill": brush.color().name(QColor.HexArgb), "opacity": float(item.opacity())}
+            # 画笔路径
+            if isinstance(item, QGraphicsPathItem):
+                path: QPainterPath = item.path(); pen = item.pen()
+                segs = []
+                for i in range(path.elementCount()):
+                    el = path.elementAt(i)
+                    if el.isMoveTo():
+                        segs.append({"cmd": "M", "x": el.x, "y": el.y})
+                    else:
+                        segs.append({"cmd": "L", "x": el.x, "y": el.y})
+                return {"type": "brush_path", "path": segs,
+                        "stroke": pen.color().name(QColor.HexArgb), "width": pen.widthF(), "style": int(pen.style()),
+                        "opacity": float(item.opacity())}
         except Exception:
             return None
         return None
 
     def _is_supported_item(self, item) -> bool:
         try:
+            from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsRectItem, QGraphicsPolygonItem, QGraphicsPathItem
             from app.core.shapes.circle_item import CircleItem
-            from PySide6.QtWidgets import QGraphicsEllipseItem
-            if isinstance(item, (CircleItem, QGraphicsEllipseItem)):
+            if isinstance(item, (CircleItem, QGraphicsEllipseItem, QGraphicsLineItem, QGraphicsRectItem, QGraphicsPolygonItem, QGraphicsPathItem)):
                 return True
         except Exception:
             pass
-        # 宽松判断：具备椭圆关键属性也视为可复制
-        return all(hasattr(item, name) for name in ("rect", "pen", "brush", "scenePos", "opacity"))
+        # 宽松判断：具备常见图元属性也视为可复制
+        return all(hasattr(item, name) for name in ("pen", "opacity"))
 
     def _find_supported_selected_item(self):
         selected = self.scene().selectedItems()
@@ -440,8 +538,13 @@ class CanvasView(QGraphicsView):
                 if hit is not None and self._is_supported_item(hit):
                     item = hit
                 else:
-                    self.copyCompleted.emit(False)
-                    return
+                    # 最后兜底：若命中失败但有任何选中项，取第一个进行通用复制
+                    sel = list(self.scene().selectedItems())
+                    if sel:
+                        item = sel[0]
+                    else:
+                        self.copyCompleted.emit(False)
+                        return
             except Exception:
                 self.copyCompleted.emit(False)
                 return
@@ -449,56 +552,44 @@ class CanvasView(QGraphicsView):
             from PySide6.QtWidgets import QApplication
             from PySide6.QtGui import QColor
             import json
-            # 宽松检查：尽可能从任意“椭圆样式”的图元构建 payload
+            # 优先特定类型的 payload
             payload = self._build_payload_from_item(item)
-            if payload is None and hasattr(item, 'rect') and hasattr(item, 'pen') and hasattr(item, 'brush') and hasattr(item, 'scenePos') and hasattr(item, 'opacity'):
-                rect = item.rect()
-                r = rect.width() / 2.0
-                pos = item.scenePos()
-                pen = item.pen()
-                brush = item.brush()
-                payload = {
-                    "type": "circle",
-                    "cx": pos.x(),
-                    "cy": pos.y(),
-                    "r": r,
-                    "stroke": pen.color().name(QColor.HexArgb),
-                    "width": pen.widthF(),
-                    "style": int(pen.style()),
-                    "fill": brush.color().name(QColor.HexArgb),
-                    "opacity": float(item.opacity()),
-                }
-            if payload is None and hasattr(item, 'sceneBoundingRect') and hasattr(item, 'pen') and hasattr(item, 'brush') and hasattr(item, 'opacity'):
-                # 最后兜底：使用包围盒作为圆，中心取 sceneBoundingRect 中心，半径取较大边/2
-                rect = item.sceneBoundingRect()
-                r = max(rect.width(), rect.height()) / 2.0
-                center = rect.center()
-                pen = item.pen(); brush = item.brush()
-                payload = {
-                    "type": "circle",
-                    "cx": center.x(),
-                    "cy": center.y(),
-                    "r": r,
-                    "stroke": pen.color().name(QColor.HexArgb),
-                    "width": pen.widthF(),
-                    "style": int(pen.style()),
-                    "fill": brush.color().name(QColor.HexArgb),
-                    "opacity": float(item.opacity()),
-                }
-
+            # 通用兜底：用包围盒创建矩形
+            if payload is None:
+                payload = self._fallback_payload_any(item)
             if payload is not None:
                 text = json.dumps(payload)
                 mime = QMimeData()
+                # 同一个 QMimeData 同时设置文本与自定义 MIME，避免平台覆盖
                 mime.setText(text)
                 mime.setData("application/x-graphics-shape", text.encode("utf-8"))
                 cb = QApplication.clipboard()
-                # 先写入纯文本，再写入自定义 MIME（某些平台需要此顺序）
-                cb.setText(text)
                 cb.setMimeData(mime)
+                self._last_copied_payload = payload
                 self.copyCompleted.emit(True)
                 return
         except Exception:
             self.copyCompleted.emit(False)
+
+    def _fallback_payload_any(self, item) -> dict | None:
+        try:
+            from PySide6.QtGui import QColor
+            rect = item.sceneBoundingRect()
+            pen = getattr(item, 'pen', lambda: None)()
+            stroke = pen.color().name(QColor.HexArgb) if pen is not None else "#333333"
+            width = float(getattr(pen, 'widthF', lambda: 2.0)()) if pen is not None else 2.0
+            return {
+                "type": "rect",
+                "x": rect.x(), "y": rect.y(),
+                "rect_w": rect.width(), "rect_h": rect.height(),
+                "stroke": stroke,
+                "strokeWidth": width,
+                "style": int(getattr(pen, 'style', lambda: 1)()),
+                "fill": "#00000000",
+                "opacity": float(getattr(item, 'opacity', lambda: 1.0)()),
+            }
+        except Exception:
+            return None
 
     def paste_from_clipboard(self, at_scene_pos: QPointF | None = None) -> None:
         try:
@@ -507,8 +598,23 @@ class CanvasView(QGraphicsView):
 
             cb = QApplication.clipboard()
             md = cb.mimeData()
-            text = md.data("application/x-graphics-shape").data().decode("utf-8") if md.hasFormat("application/x-graphics-shape") else cb.text()
-            data = json.loads(text)
+            text = None
+            if md and md.hasFormat("application/x-graphics-shape"):
+                try:
+                    ba = md.data("application/x-graphics-shape")
+                    text = bytes(ba).decode("utf-8")
+                except Exception:
+                    text = None
+            if not text:
+                text = cb.text()
+            data = None
+            try:
+                data = json.loads(text) if text else None
+            except Exception:
+                data = None
+            # 读取失败时使用内存兜底
+            if not isinstance(data, dict) and isinstance(self._last_copied_payload, dict):
+                data = dict(self._last_copied_payload)
             if not isinstance(data, dict):
                 self.pasteCompleted.emit(False)
                 return
@@ -524,8 +630,22 @@ class CanvasView(QGraphicsView):
             import json
             cb = QApplication.clipboard()
             md = cb.mimeData()
-            text = md.data("application/x-graphics-shape").data().decode("utf-8") if md and md.hasFormat("application/x-graphics-shape") else cb.text()
-            data = json.loads(text)
+            text = None
+            if md and md.hasFormat("application/x-graphics-shape"):
+                try:
+                    ba = md.data("application/x-graphics-shape")
+                    text = bytes(ba).decode("utf-8")
+                except Exception:
+                    text = None
+            if not text:
+                text = cb.text()
+            data = None
+            try:
+                data = json.loads(text) if text else None
+            except Exception:
+                data = None
+            if not isinstance(data, dict) and isinstance(self._last_copied_payload, dict):
+                data = dict(self._last_copied_payload)
             if not isinstance(data, dict):
                 return
             self._pending_paste_payload = data
@@ -535,8 +655,8 @@ class CanvasView(QGraphicsView):
 
     def contextMenuEvent(self, event):  # type: ignore[override]
         # 若当前无选择，则尝试选中右键位置下的图元，方便复制
+        hit = self.itemAt(event.pos())
         if not self.scene().selectedItems():
-            hit = self.itemAt(event.pos())
             if hit is not None:
                 self.scene().clearSelection()
                 hit.setSelected(True)
@@ -547,24 +667,19 @@ class CanvasView(QGraphicsView):
         act_del = menu.addAction("删除")
         act_copy = menu.addAction("复制")
         act_paste = menu.addAction("粘贴")
-        # 根据状态启用/禁用（仅当选中的是圆时开放复制）
+        # 根据状态启用/禁用（放宽：有命中或有选择即可复制/删除）
         sel_items = self.scene().selectedItems()
-        has_supported = any(self._is_supported_item(it) for it in sel_items)
-        act_del.setEnabled(bool(sel_items))
-        act_copy.setEnabled(has_supported)
-        # 粘贴有效性检查（优先自定义 MIME，其次纯文本 JSON）
+        has_any_target = bool(sel_items) or (hit is not None)
+        act_del.setEnabled(has_any_target)
+        act_copy.setEnabled(has_any_target)
+        # 粘贴有效性检查（放宽）：剪贴板有自定义 MIME 或者文本非空即可尝试
         try:
             from PySide6.QtWidgets import QApplication
-            import json
             cb = QApplication.clipboard()
             md = cb.mimeData()
             enabled = False
-            if md and md.hasFormat("application/x-graphics-shape"):
+            if md and (md.hasFormat("application/x-graphics-shape") or (cb.text() or "").strip()):
                 enabled = True
-            else:
-                txt = cb.text()
-                data = json.loads(txt)
-                enabled = isinstance(data, dict) and data.get("type") == "circle"
             act_paste.setEnabled(enabled)
         except Exception:
             act_paste.setEnabled(False)
@@ -578,10 +693,12 @@ class CanvasView(QGraphicsView):
                     from PySide6.QtWidgets import QApplication
                     import json
                     payload = self._build_payload_from_item(self._last_context_item)
+                    if payload is None:
+                        payload = self._fallback_payload_any(self._last_context_item)
                     if payload:
                         text = json.dumps(payload)
                         mime = QMimeData(); mime.setText(text); mime.setData("application/x-graphics-shape", text.encode("utf-8"))
-                        cb = QApplication.clipboard(); cb.setText(text); cb.setMimeData(mime)
+                        cb = QApplication.clipboard(); cb.setMimeData(mime)
                         self.copyCompleted.emit(True)
                     else:
                         self.copyCompleted.emit(False)

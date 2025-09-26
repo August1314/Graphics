@@ -116,7 +116,7 @@ class BrushStrokeProperty(QWidget):
         color_layout.addWidget(self.color_button)
         color_layout.addStretch()
         
-        # 笔触宽度
+        # 笔触宽度（去掉“应用”按钮，改为数值变更即应用）
         width_layout = QHBoxLayout()
         width_label = QLabel("笔触宽度:")
         self.width_spin = QDoubleSpinBox()
@@ -124,15 +124,11 @@ class BrushStrokeProperty(QWidget):
         self.width_spin.setSingleStep(0.5)
         self.width_spin.setValue(self._item.pen().widthF())
         self._last_width = float(self._item.pen().widthF())
-        # 改为显式“应用”提交，避免与样式切换在同一事件周期内交错触发
-        # self.width_spin.valueChanged.connect(self._on_width_changed)
+        # 直接应用，必要时可做轻微延迟防抖
+        self.width_spin.valueChanged.connect(lambda _v: QTimer.singleShot(0, self._commit_width))
         
         width_layout.addWidget(width_label)
         width_layout.addWidget(self.width_spin)
-        self.width_apply_btn = QPushButton("应用")
-        self.width_apply_btn.setFixedWidth(56)
-        self.width_apply_btn.clicked.connect(self._commit_width)
-        width_layout.addWidget(self.width_apply_btn)
         
         # 笔触样式
         style_layout = QHBoxLayout()
@@ -164,94 +160,41 @@ class BrushStrokeProperty(QWidget):
         layout.addLayout(color_layout)
         layout.addLayout(width_layout)
         layout.addLayout(style_layout)
-    
+
     def _update_color_button(self) -> None:
         color = self._item.pen().color()
         self.color_button.setStyleSheet(f"background-color: {color.name()}; border: 1px solid #ccc;")
-    
+
     def _on_color_clicked(self) -> None:
-        current_color = self._item.pen().color()
-        color = QColorDialog.getColor(current_color, self.color_button, "选择笔触颜色")
+        color = QColorDialog.getColor(self._item.pen().color(), self, "选择颜色")
         if color.isValid():
-            old = current_color
-            new = color
-            def do():
-                p = self._item.pen(); p.setColor(new); self._item.setPen(p); self.scene.update_base_style(self._item)
-            def undo():
-                p = self._item.pen(); p.setColor(old); self._item.setPen(p); self.scene.update_base_style(self._item)
-            self.undo_stack.push(UpdateStyleCommand.make("修改笔触颜色", do, undo))
-            # 按钮预览颜色刷新（控件仍存活时）
+            p = self._item.pen(); p.setColor(color); self._item.setPen(p)
             try:
-                self._update_color_button()
+                self.scene.update_base_style(self._item)
             except Exception:
                 pass
-    
-    def _on_width_changed(self, value: float) -> None:
-        # 已禁用即时回写，保留方法以兼容旧连接
-        pass
+            self._update_color_button()
 
     def _commit_width(self) -> None:
-        # 调试：进入提交宽度
+        w = float(self.width_spin.value())
+        if abs(w - self._last_width) < 1e-6:
+            return
+        p = self._item.pen(); p.setWidthF(w); self._item.setPen(p)
         try:
-            import sys
-            print(f"DEBUG: _commit_width enter curPenW={self._item.pen().widthF()} spin={self.width_spin.value()} style={int(self._item.pen().style())}")
-            sys.stdout.flush()
+            self.scene.update_base_style(self._item)
         except Exception:
             pass
-        if not self.isVisible():
-            return
-        new_w = float(self.width_spin.value())
-        old_w = float(self._last_width)
-        if abs(new_w - old_w) < 1e-6:
-            return
-        def do():
-            p = self._item.pen(); p.setWidthF(new_w); self._item.setPen(p)
-            try:
-                self.scene.blockSignals(True)
-                self.scene.update_base_style(self._item)
-            finally:
-                self.scene.blockSignals(False)
-            try:
-                import sys
-                print(f"DEBUG: _commit_width done new={new_w}")
-                sys.stdout.flush()
-            except Exception:
-                pass
-        def undo():
-            p = self._item.pen(); p.setWidthF(old_w); self._item.setPen(p)
-            try:
-                self.scene.blockSignals(True)
-                self.scene.update_base_style(self._item)
-            finally:
-                self.scene.blockSignals(False)
-        self.undo_stack.push(UpdateStyleCommand.make("修改笔触宽度", do, undo))
-        self._last_width = new_w
-    
+        self._last_width = w
+
     def _on_style_changed(self, text: str) -> None:
-        # 调试：进入样式切换
+        style = self.style_mapping.get(text)
+        if style is None:
+            return
+        p = self._item.pen(); p.setStyle(style); self._item.setPen(p)
         try:
-            import sys
-            print(f"DEBUG: _on_style_changed enter text={text} width={self._item.pen().widthF()} style={int(self._item.pen().style())}")
-            sys.stdout.flush()
+            self.scene.update_base_style(self._item)
         except Exception:
             pass
-        if text in self.style_mapping:
-            def apply():
-                pen = self._item.pen()
-                pen.setStyle(self.style_mapping[text])
-                self._item.setPen(pen)
-                try:
-                    self.scene.blockSignals(True)
-                    self.scene.update_base_style(self._item)
-                finally:
-                    self.scene.blockSignals(False)
-                try:
-                    import sys
-                    print(f"DEBUG: _on_style_changed applied text={text} width={self._item.pen().widthF()} style={int(self._item.pen().style())}")
-                    sys.stdout.flush()
-                except Exception:
-                    pass
-            QTimer.singleShot(0, apply)
 
 
 class BrushOpacityProperty(QWidget):
