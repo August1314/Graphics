@@ -42,7 +42,7 @@ class ToolBar(QToolBar):
         self.action_ellipse = QAction(self._icons.get("circle"), "圆", self); self.action_ellipse.setCheckable(True); self.action_ellipse.setData("circle"); self.action_ellipse.setIconVisibleInMenu(True); self._group.addAction(self.action_ellipse)
         self.action_polygon = QAction(self._icons.get("polygon"), "多边形", self); self.action_polygon.setCheckable(True); self.action_polygon.setData("polygon"); self.action_polygon.setIconVisibleInMenu(True); self._group.addAction(self.action_polygon)
         
-        # 画笔动作
+        # 画笔动作（使用独立图标）——本版本移除喷枪入口
         self.action_brush_pen = QAction(self._icons.get("brush_pen"), "普通画笔", self); self.action_brush_pen.setCheckable(True); self.action_brush_pen.setData("brush_pen"); self.action_brush_pen.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_pen)
         self.action_brush_marker = QAction(self._icons.get("brush_marker"), "马克笔", self); self.action_brush_marker.setCheckable(True); self.action_brush_marker.setData("brush_marker"); self.action_brush_marker.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_marker)
         self.action_brush_calligraphy = QAction(self._icons.get("brush_calligraphy"), "书法笔", self); self.action_brush_calligraphy.setCheckable(True); self.action_brush_calligraphy.setData("brush_calligraphy"); self.action_brush_calligraphy.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_calligraphy)
@@ -50,9 +50,10 @@ class ToolBar(QToolBar):
         # 橡皮擦动作
         self.action_eraser = QAction(self._icons.get("eraser"), "橡皮擦", self); self.action_eraser.setCheckable(True); self.action_eraser.setData("eraser"); self.action_eraser.setIconVisibleInMenu(True); self._group.addAction(self.action_eraser)
 
-        # 下拉按钮“图形”
+        # 下拉按钮"图形"
         self.shape_button = QToolButton(self)
         self.shape_button.setText("图形")
+        # 点击整个按钮直接弹出菜单
         self.shape_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.shape_menu = QMenu(self.shape_button)
         for a in (self.action_point, self.action_line, self.action_rect, self.action_ellipse, self.action_polygon):
@@ -63,6 +64,7 @@ class ToolBar(QToolBar):
         # 下拉按钮"画笔"
         self.brush_button = QToolButton(self)
         self.brush_button.setText("画笔")
+        # 点击整个按钮直接弹出菜单
         self.brush_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.brush_menu = QMenu(self.brush_button)
         for a in (self.action_brush_pen, self.action_brush_marker, self.action_brush_calligraphy):
@@ -73,7 +75,7 @@ class ToolBar(QToolBar):
         # 橡皮擦按钮
         self.addAction(self.action_eraser)
 
-        # ------- 快速笔触（颜色/线宽/线型） -------
+        # ------- 快速笔触设置（颜色/宽度/线型） -------
         from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QSpinBox, QComboBox, QLabel
         from PySide6.QtGui import QColor
         self._quick_container = QWidget(self)
@@ -103,6 +105,31 @@ class ToolBar(QToolBar):
         # 默认色
         self._quick_color = QColor("#0066cc"); self._apply_color_button()
         lay.addWidget(lbl_color); lay.addWidget(self._btn_color); lay.addWidget(lbl_width); lay.addWidget(self._spin_width); lay.addWidget(lbl_dash); lay.addWidget(self._combo_dash)
+        except Exception:
+            pass
+        # 居中文本（下拉和选择框）+ 垂直居中显示
+        try:
+            self._combo_dash.setEditable(True)
+            le = self._combo_dash.lineEdit()
+            if le is not None:
+                le.setReadOnly(True)
+                le.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            for i in range(self._combo_dash.count()):
+                self._combo_dash.setItemData(i, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
+            self._combo_dash.setStyleSheet("QComboBox { padding: 2px 6px; } QComboBox QAbstractItemView::item { text-align: center; }")
+        except Exception:
+            pass
+        self._combo_dash.currentIndexChanged.connect(self._emit_dash)
+        # 默认颜色
+        self._quick_color = QColor("#0066cc")
+        self._apply_color_button()
+        lay.addWidget(lbl_color)
+        lay.addWidget(self._btn_color)
+        lay.addWidget(lbl_width)
+        lay.addWidget(self._spin_width)
+        lay.addWidget(lbl_dash)
+        lay.addWidget(self._combo_dash)
+>>>>>>> a5838be067fcc2a5430e477c41d5ecbd52f964bd
         self.addWidget(self._quick_container)
 
         # 默认选择工具

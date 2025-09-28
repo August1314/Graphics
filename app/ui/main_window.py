@@ -154,6 +154,7 @@ class MainWindow(QMainWindow):
         self._delete_action.triggered.connect(self._on_delete_selected)
         self.addAction(self._delete_action)
 
+    # ---- 快速笔触到画布样式 ----
     def _on_quick_color(self, color) -> None:
         try:
             self.view._current_pen_color = color

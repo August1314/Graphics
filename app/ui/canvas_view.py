@@ -59,11 +59,12 @@ class CanvasView(QGraphicsView):
         self._last_context_item = None
         # 橡皮框选择状态标记，供主窗抑制属性面板在框选时的回写
         self._rubber_selecting: bool = False
-        # 当前绘制样式
+        # 当前绘制样式（在开始绘制时应用于草稿/新建图元）
         from PySide6.QtGui import QColor, QPen
         self._current_pen_color = QColor("#0066cc")
         self._current_pen_width = 2.0
         self._current_pen_style = Qt.PenStyle.SolidLine
+        # 预构造一个 QPen 用于注入 BrushTool
         self._current_pen_obj = QPen(self._current_pen_color, float(self._current_pen_width))
         self._current_pen_obj.setStyle(self._current_pen_style)
 
@@ -99,20 +100,24 @@ class CanvasView(QGraphicsView):
                 # 开始绘制会话时，禁用橡皮框拖拽以避免抢占事件
                 self.setDragMode(QGraphicsView.NoDrag)
                 scene_pos = self.mapToScene(event.pos())
-                # 若为画笔工具，按当前样式注入
+                # 在按下前把当前笔注入画笔工具
                 try:
-                    from PySide6.QtGui import QPen
                     if self._tool is self._brush_tool:
                         self._refresh_current_pen_obj()
                         self._brush_tool.set_pen(self._current_pen_obj)
                 except Exception:
                     pass
                 self._tool.on_press(self.scene(), scene_pos, event)
-                # 若工具有草稿图元，为其设置当前笔触
+                # 如果工具创建了草稿图元，尽早应用当前笔触样式
                 try:
                     draft = getattr(self._tool, "_draft", None)
                     if draft is not None and hasattr(draft, "pen") and hasattr(draft, "setPen"):
-                        p = draft.pen(); p.setColor(self._current_pen_color); p.setWidthF(float(self._current_pen_width)); p.setStyle(self._current_pen_style); draft.setPen(p)
+                        from PySide6.QtGui import QPen
+                        p = draft.pen()
+                        p.setColor(self._current_pen_color)
+                        p.setWidthF(float(self._current_pen_width))
+                        p.setStyle(self._current_pen_style)
+                        draft.setPen(p)
                 except Exception:
                     pass
                 event.accept()
@@ -226,8 +231,10 @@ class CanvasView(QGraphicsView):
             # 设置画笔类型
             brush_type = name.replace("brush_", "")
             self._brush_tool.set_brush_type(brush_type)
+            # 每次切换到画笔时，用当前样式更新画笔
             try:
-                self._refresh_current_pen_obj(); self._brush_tool.set_pen(self._current_pen_obj)
+                self._refresh_current_pen_obj()
+                self._brush_tool.set_pen(self._current_pen_obj)
             except Exception:
                 pass
             self._tool = self._brush_tool
