@@ -105,31 +105,6 @@ class ToolBar(QToolBar):
         # 默认色
         self._quick_color = QColor("#0066cc"); self._apply_color_button()
         lay.addWidget(lbl_color); lay.addWidget(self._btn_color); lay.addWidget(lbl_width); lay.addWidget(self._spin_width); lay.addWidget(lbl_dash); lay.addWidget(self._combo_dash)
-        except Exception:
-            pass
-        # 居中文本（下拉和选择框）+ 垂直居中显示
-        try:
-            self._combo_dash.setEditable(True)
-            le = self._combo_dash.lineEdit()
-            if le is not None:
-                le.setReadOnly(True)
-                le.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-            for i in range(self._combo_dash.count()):
-                self._combo_dash.setItemData(i, Qt.AlignmentFlag.AlignCenter, Qt.ItemDataRole.TextAlignmentRole)
-            self._combo_dash.setStyleSheet("QComboBox { padding: 2px 6px; } QComboBox QAbstractItemView::item { text-align: center; }")
-        except Exception:
-            pass
-        self._combo_dash.currentIndexChanged.connect(self._emit_dash)
-        # 默认颜色
-        self._quick_color = QColor("#0066cc")
-        self._apply_color_button()
-        lay.addWidget(lbl_color)
-        lay.addWidget(self._btn_color)
-        lay.addWidget(lbl_width)
-        lay.addWidget(self._spin_width)
-        lay.addWidget(lbl_dash)
-        lay.addWidget(self._combo_dash)
->>>>>>> a5838be067fcc2a5430e477c41d5ecbd52f964bd
         self.addWidget(self._quick_container)
 
         # 默认选择工具
