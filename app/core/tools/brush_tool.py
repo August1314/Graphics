@@ -37,6 +37,8 @@ class BrushTool(BaseTool):
         self._opacity = 1.0
         self._smoothing = True
         self._pressure_sensitive = False
+        # 若由外部（工具栏）指定笔触，则不在 _update_brush_properties 中覆盖颜色/线宽
+        self._user_pen_override: bool = False
         
         # 路径平滑参数
         self._smoothing_factor = 0.5
@@ -60,7 +62,8 @@ class BrushTool(BaseTool):
     
     def set_pen(self, pen: QPen) -> None:
         """设置画笔笔触"""
-        self._pen = pen
+        self._pen = QPen(pen)
+        self._user_pen_override = True
     
     def set_brush(self, brush: QBrush) -> None:
         """设置画笔填充"""
@@ -181,19 +184,23 @@ class BrushTool(BaseTool):
     def _update_brush_properties(self) -> None:
         """根据画笔类型更新属性"""
         if self._brush_type == self.BrushType.PEN:
-            self._pen.setWidthF(8.0)
+            if not self._user_pen_override:
+                self._pen.setWidthF(8.0)
             self._pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             self._pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == self.BrushType.MARKER:
-            self._pen.setWidthF(8.0)
+            if not self._user_pen_override:
+                self._pen.setWidthF(8.0)
             self._pen.setCapStyle(Qt.PenCapStyle.SquareCap)
             self._pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
         elif self._brush_type == self.BrushType.CALLIGRAPHY:
-            self._pen.setWidthF(5.0)
+            if not self._user_pen_override:
+                self._pen.setWidthF(5.0)
             self._pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             self._pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == self.BrushType.SPRAY:
-            self._pen.setWidthF(8.0)
+            if not self._user_pen_override:
+                self._pen.setWidthF(8.0)
             self._pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             self._pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == self.BrushType.ERASER:

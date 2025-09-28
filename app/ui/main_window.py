@@ -32,13 +32,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.view)
 
         self.undo_stack = QUndoStack(self)
-        # 撤销/重做后刷新属性面板，保持与当前选中项状态一致
         try:
             self.undo_stack.indexChanged.connect(self._on_undo_index_changed)
         except Exception:
             pass
 
-        # 设置项：切回选择工具时恢复上次选择
         self._restore_prev_selection_enabled: bool = True
         self._prev_selected_items: list = []
 
@@ -46,13 +44,18 @@ class MainWindow(QMainWindow):
         self._init_status_bar()
         self._init_toolbar()
         self._init_docks()
+        self._apply_modern_style()
 
     def _init_menu(self) -> None:
+        try:
+            self.menuBar().setNativeMenuBar(False)
+        except Exception:
+            pass
         menu = self.menuBar()
         file_menu = menu.addMenu("文件")
         settings_menu = menu.addMenu("设置")
         edit_menu = menu.addMenu("编辑")
-        debug_menu = menu.addMenu("调试")
+        self.view_menu = menu.addMenu("视图")
 
         action_open = QAction("打开...", self)
         action_open.setShortcut("Ctrl+O")
@@ -70,36 +73,18 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(action_quit)
 
-        # 设置：切回选择工具时恢复上次选择
         self.action_restore_prev_selection = QAction("切回‘选择’时恢复上次选择", self)
         self.action_restore_prev_selection.setCheckable(True)
         self.action_restore_prev_selection.setChecked(self._restore_prev_selection_enabled)
         self.action_restore_prev_selection.toggled.connect(self._on_toggle_restore_prev_selection)
         settings_menu.addAction(self.action_restore_prev_selection)
 
-        # 撤销/重做
         action_undo = self.undo_stack.createUndoAction(self, "撤销")
         action_redo = self.undo_stack.createRedoAction(self, "重做")
         action_undo.setShortcut(QKeySequence.Undo)
         action_redo.setShortcut(QKeySequence.Redo)
         edit_menu.addAction(action_undo)
         edit_menu.addAction(action_redo)
-
-        # 复制/粘贴（Cmd/Ctrl 自动适配）
-        action_copy = QAction("复制", self)
-        action_copy.setShortcut(QKeySequence.Copy)
-        action_copy.triggered.connect(self._on_copy)
-        edit_menu.addAction(action_copy)
-
-        action_paste = QAction("粘贴", self)
-        action_paste.setShortcut(QKeySequence.Paste)
-        action_paste.triggered.connect(self._on_paste)
-        edit_menu.addAction(action_paste)
-
-        # 调试：查看剪贴板文本
-        action_clip = QAction("查看剪贴板文本", self)
-        action_clip.triggered.connect(self._on_show_clipboard)
-        debug_menu.addAction(action_clip)
 
     def _init_status_bar(self) -> None:
         self.statusBar().showMessage("就绪")
@@ -108,17 +93,28 @@ class MainWindow(QMainWindow):
         self.tools = ToolBar(self)
         self.addToolBar(self.tools)
         self.tools.toolChanged.connect(self._on_tool_changed)
+        try:
+            if hasattr(self.tools, 'quickStrokeColorChanged'):
+                self.tools.quickStrokeColorChanged.connect(self._on_quick_color)
+            if hasattr(self.tools, 'quickStrokeWidthChanged'):
+                self.tools.quickStrokeWidthChanged.connect(self._on_quick_width)
+            if hasattr(self.tools, 'quickStrokeDashChanged'):
+                self.tools.quickStrokeDashChanged.connect(self._on_quick_dash)
+        except Exception:
+            pass
 
     def _init_docks(self) -> None:
-        # 属性面板 Dock
-        prop_dock = QDockWidget("属性", self)
-        prop_dock.setObjectName("dock_properties")
-        prop_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.prop_dock = QDockWidget("属性", self)
+        self.prop_dock.setObjectName("dock_properties")
+        self.prop_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.property_panel = PropertyPanel(self)
-        prop_dock.setWidget(self.property_panel)
-        self.addDockWidget(Qt.RightDockWidgetArea, prop_dock)
+        self.prop_dock.setWidget(self.property_panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.prop_dock)
+        prop_toggle_action = self.prop_dock.toggleViewAction()
+        prop_toggle_action.setText("属性面板")
+        prop_toggle_action.setShortcut("F7")
+        self.view_menu.addAction(prop_toggle_action)
 
-        # JSON 保存/加载 Dock（面板+按钮）
         io_dock = QDockWidget("文件", self)
         io_dock.setObjectName("dock_io")
         io_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
@@ -135,7 +131,6 @@ class MainWindow(QMainWindow):
         io_dock.setWidget(container)
         self.addDockWidget(Qt.RightDockWidgetArea, io_dock)
 
-        # 绑定属性面板与场景选择
         self.scene.selectionChanged.connect(self._on_scene_selection_changed)
         pp = self.property_panel
         pp.set_enabled(False)
@@ -147,22 +142,50 @@ class MainWindow(QMainWindow):
         pp.strokeWidthChanged.connect(self._on_stroke_width_changed)
         pp.fillColorChanged.connect(self._on_fill_color_changed)
         pp.opacityChanged.connect(self._on_opacity_changed)
-        # 线型联动
         pp.combo_dash.currentIndexChanged.connect(self._on_dash_style_changed)
 
-        # 视图事件接入撤销/重做
         self.view.shapeCommitted.connect(self._on_shape_committed)
         self.view.moveCommitted.connect(self._on_move_committed)
         self.view.deleteRequested.connect(self._on_delete_requested)
         self.view.selectionGeometryChanged.connect(self._on_scene_selection_changed)
-        self.view.copyCompleted.connect(self._on_copy_completed)
-        self.view.pasteCompleted.connect(self._on_paste_completed)
 
-        # 删除快捷键
         self._delete_action = QAction("删除", self)
         self._delete_action.setShortcut("Delete")
         self._delete_action.triggered.connect(self._on_delete_selected)
         self.addAction(self._delete_action)
+
+    # ---- 快速笔触到画布样式 ----
+    def _on_quick_color(self, color) -> None:
+        try:
+            self.view._current_pen_color = color
+        except Exception:
+            pass
+
+    def _on_quick_width(self, w: float) -> None:
+        try:
+            self.view._current_pen_width = float(w)
+        except Exception:
+            pass
+
+    def _on_quick_dash(self, style) -> None:
+        try:
+            self.view._current_pen_style = style
+        except Exception:
+            pass
+
+    def _apply_modern_style(self) -> None:
+        self.setStyleSheet(
+            """
+            QMainWindow { background: #f5f7fb; }
+            QToolBar { background: rgba(255,255,255,0.9); border: none; padding: 6px; spacing: 8px; }
+            QToolBar QToolButton { padding: 6px 10px; border-radius: 6px; }
+            QToolBar QToolButton:hover { background: rgba(0,0,0,0.06); }
+            QDockWidget::title { padding: 6px 10px; background: rgba(0,0,0,0.04); border-bottom: 1px solid rgba(0,0,0,0.06); }
+            QPushButton { border-radius: 6px; padding: 6px 12px; }
+            QComboBox, QSpinBox, QDoubleSpinBox { padding: 4px 8px; border-radius: 6px; }
+            QMenu { border-radius: 6px; padding: 6px; }
+            """
+        )
 
     def _on_open(self) -> None:
         QFileDialog.getOpenFileName(self, "打开文件", "", "JSON 文件 (*.json)")
@@ -180,40 +203,30 @@ class MainWindow(QMainWindow):
     def _on_tool_changed(self, name: str) -> None:
         self.statusBar().showMessage(f"当前工具：{name}")
         self.view.set_tool(name)
-        
-        # 如果切换到橡皮擦工具，显示橡皮擦属性面板
         if name == "eraser":
             eraser_tool = self._get_selected_eraser_tool()
             if eraser_tool is not None:
                 self.property_panel.build_for(eraser_tool, "eraser", self.scene, self.undo_stack)
                 self.property_panel.set_enabled(True)
                 return
-        
-        # 切换工具时处理选择记忆/清理
         if name != "select":
-            # 记录当前选择并清除
             self._prev_selected_items = [item for item in self.scene.selectedItems()]
             self.scene.clearSelection()
         else:
-            # 切回选择工具：根据设置恢复上次选择
             if self._restore_prev_selection_enabled and self._prev_selected_items:
                 for item in list(self._prev_selected_items):
                     if item.scene() is self.scene:
                         item.setSelected(True)
-                # 可选择保留记忆或清空，这里保留一轮
 
     def _on_toggle_restore_prev_selection(self, checked: bool) -> None:
         self._restore_prev_selection_enabled = checked
 
-    # ---- 属性联动 ----
     def _get_selected_circle(self):
         items = self.scene.selectedItems()
         if not items:
             return None
         item = items[0]
-        # 仅当为圆形（QGraphicsEllipseItem 派生）时联动
         from app.core.shapes.circle_item import CircleItem
-
         if isinstance(item, CircleItem):
             return item
         return None
@@ -253,7 +266,7 @@ class MainWindow(QMainWindow):
         if isinstance(item, PolygonItem):
             return item
         return None
-    
+
     def _get_selected_brush_path(self):
         items = self.scene.selectedItems()
         if not items:
@@ -262,15 +275,16 @@ class MainWindow(QMainWindow):
         if isinstance(item, BrushPathItem):
             return item
         return None
-    
+
     def _get_selected_eraser_tool(self):
-        # 检查当前工具是否为橡皮擦工具
-        if hasattr(self.view, '_tool') and isinstance(self.view._tool, EraserTool):
-            return self.view._tool
+        try:
+            if hasattr(self.view, '_tool') and isinstance(self.view._tool, EraserTool):
+                return self.view._tool
+        except Exception:
+            pass
         return None
 
     def _on_scene_selection_changed(self) -> None:
-        # 框选过程中不刷新属性面板，避免在画笔存在时触发回写导致圆/矩形尺寸被改动
         try:
             if getattr(self.view, "_rubber_selecting", False):
                 return
@@ -279,7 +293,6 @@ class MainWindow(QMainWindow):
         circle = self._get_selected_circle()
         if circle is not None:
             self.property_panel.set_mode("circle")
-            # 动态装配组件
             self.property_panel.build_for(circle, "circle", self.scene, self.undo_stack)
             self.property_panel.set_enabled(True)
             return
@@ -295,10 +308,8 @@ class MainWindow(QMainWindow):
             self.property_panel.build_for(line, "line", self.scene, self.undo_stack)
             self.property_panel.set_enabled(True)
             return
-        # 矩形
         rect = self._get_selected_rect()
         if rect is not None:
-            # 框选进行中不刷新，以免几何被回写
             try:
                 if getattr(self.view, "_rubber_selecting", False):
                     return
@@ -325,7 +336,6 @@ class MainWindow(QMainWindow):
         self.property_panel.set_enabled(False)
 
     def _on_center_changed(self, cx: float, cy: float) -> None:
-        # 框选过程中忽略属性回写，避免圆在框选时被误改
         try:
             if getattr(self.view, "_rubber_selecting", False):
                 return
@@ -333,7 +343,6 @@ class MainWindow(QMainWindow):
             pass
         circle = self._get_selected_circle()
         if circle is None:
-            # Point
             point = self._get_selected_point()
             if point is None:
                 return
@@ -352,7 +361,6 @@ class MainWindow(QMainWindow):
         self.undo_stack.push(UpdateStyleCommand.make("修改中心", apply, revert))
 
     def _on_radius_changed(self, r: float) -> None:
-        # 框选过程中忽略属性回写
         try:
             if getattr(self.view, "_rubber_selecting", False):
                 return
@@ -360,7 +368,6 @@ class MainWindow(QMainWindow):
             pass
         circle = self._get_selected_circle()
         if circle is None:
-            # Point 半径
             point = self._get_selected_point()
             if point is None:
                 return
@@ -381,7 +388,6 @@ class MainWindow(QMainWindow):
         self.undo_stack.push(UpdateStyleCommand.make("修改半径", apply, revert))
 
     def _on_stroke_color_changed(self, color) -> None:
-        # Circle or Point or Line
         circle = self._get_selected_circle()
         if circle is not None:
             pen = circle.pen(); old = pen.color()
@@ -451,7 +457,6 @@ class MainWindow(QMainWindow):
             self.undo_stack.push(UpdateStyleCommand.make("修改线宽", apply, revert))
 
     def _on_fill_color_changed(self, color) -> None:
-        # 仅 Circle/Point 支持填充
         from PySide6.QtGui import QBrush
         circle = self._get_selected_circle()
         if circle is not None:
@@ -536,11 +541,9 @@ class MainWindow(QMainWindow):
             self.undo_stack.push(UpdateStyleCommand.make("修改线型", apply, revert))
 
     def _on_delete_selected(self) -> None:
-        # 改为走撤销命令
         for item in list(self.scene.selectedItems()):
             self.undo_stack.push(DeleteShapeCommand(self.scene, item))
 
-    # 直线端点
     def _on_line_p1_changed(self, x1: float, y1: float) -> None:
         line = self._get_selected_line()
         if line is None:
@@ -563,46 +566,6 @@ class MainWindow(QMainWindow):
             line.set_points(old[0], old[1], old[2], old[3])
         self.undo_stack.push(UpdateStyleCommand.make("修改直线终点", apply, revert))
 
-    def _on_copy(self) -> None:
-        # 若无选中，尝试根据鼠标位置命中一个图元后再复制
-        if not self.scene.selectedItems():
-            pos_view = self.view.mapFromGlobal(QCursor.pos())
-            hit = self.view.itemAt(pos_view)
-            if hit is not None:
-                self.scene.clearSelection()
-                hit.setSelected(True)
-        self.view.copy_selected()
-
-    def _on_paste(self) -> None:
-        # 进入“点击画布以粘贴”模式，由用户点击决定位置
-        self.statusBar().showMessage("请在画布上点击以粘贴…")
-        self.view.begin_paste_from_clipboard()
-
-    def _on_copy_completed(self, ok: bool) -> None:
-        if ok:
-            self.statusBar().showMessage("复制成功", 3000)
-        else:
-            # 非侵入式提示，避免在非用户触发的场景反复弹窗打断操作
-            self.statusBar().showMessage("复制失败：未命中可复制对象", 3000)
-
-    def _on_paste_completed(self, ok: bool) -> None:
-        self.statusBar().showMessage("粘贴成功" if ok else "粘贴失败：剪贴板无有效数据", 3000)
-
-    def _on_show_clipboard(self) -> None:
-        # 展示当前剪贴板的纯文本与可用 MIME 格式
-        try:
-            from PySide6.QtWidgets import QApplication
-            cb = QApplication.clipboard()
-            md = cb.mimeData()
-            text = cb.text() or "<空>"
-            formats = ", ".join(md.formats()) if md is not None else "<无>"
-            preview = text if len(text) < 500 else text[:500] + "…"
-            QMessageBox.information(self, "剪贴板内容",
-                                    f"MIME 格式: {formats}\n\n文本预览:\n{preview}")
-        except Exception as e:
-            QMessageBox.warning(self, "读取失败", str(e))
-
-    # ---- 撤销/重做接入 ----
     def _on_shape_committed(self, item) -> None:
         self.undo_stack.push(AddShapeCommand(self.scene, item))
 
@@ -635,7 +598,6 @@ class MainWindow(QMainWindow):
             from app.core.serializer import load
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            # 清场（仅移除用户图元，保留可能的辅助项，这里简单清空）
             for it in list(self.scene.items()):
                 try:
                     self.scene.removeItem(it)
@@ -646,8 +608,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "加载失败", str(e))
 
-
-    # ---- 槽：撤销栈变化时刷新属性面板（带有效性检查，避免退出时访问已销毁对象） ----
     def _on_undo_index_changed(self, *_args) -> None:
         try:
             from shiboken6 import isValid  # type: ignore
