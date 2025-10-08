@@ -14,6 +14,10 @@ class PointItem(QGraphicsEllipseItem):
         self.setBrush(QBrush(QColor("#000000")))
         self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
+        
+        # 性能优化：启用缓存策略
+        # 点是静态图形，使用 ItemCoordinateCache 提升性能
+        self.setCacheMode(self.CacheMode.ItemCoordinateCache)
 
     @classmethod
     def from_dict(cls, data: dict) -> 'PointItem':

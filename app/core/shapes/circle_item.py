@@ -12,6 +12,10 @@ class CircleItem(QGraphicsEllipseItem):
         self.setPen(QPen(QColor("#0066cc"), 2))
         self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
+        
+        # 性能优化：启用缓存策略
+        # 圆形是静态图形，使用 ItemCoordinateCache 提升性能
+        self.setCacheMode(self.CacheMode.ItemCoordinateCache)
 
     def set_center_radius(self, cx: float, cy: float, r: float) -> None:
         """设置圆心和半径

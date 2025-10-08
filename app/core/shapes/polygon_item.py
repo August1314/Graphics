@@ -12,6 +12,11 @@ class PolygonItem(QGraphicsPolygonItem):
         self.setBrush(QBrush(QColor(0, 0, 0, 0)))
         self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
+        
+        # 性能优化：启用缓存策略
+        # 多边形是静态图形，使用 ItemCoordinateCache 提升性能
+        self.setCacheMode(self.CacheMode.ItemCoordinateCache)
+        
         if points:
             self.set_polygon(points)
 

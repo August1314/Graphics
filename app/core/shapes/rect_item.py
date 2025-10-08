@@ -11,6 +11,10 @@ class RectItem(QGraphicsRectItem):
         self.setBrush(QBrush(QColor(0, 0, 0, 0)))
         self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
+        
+        # 性能优化：启用缓存策略
+        # 矩形是静态图形，使用 ItemCoordinateCache 提升性能
+        self.setCacheMode(self.CacheMode.ItemCoordinateCache)
 
     def set_geometry(self, x: float, y: float, w: float, h: float) -> None:
         """设置矩形几何

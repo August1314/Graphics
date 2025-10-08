@@ -10,6 +10,10 @@ class LineItem(QGraphicsLineItem):
         self.setPen(QPen(QColor("#333333"), 2))
         self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
+        
+        # 性能优化：启用缓存策略
+        # 直线是静态图形，使用 ItemCoordinateCache 提升性能
+        self.setCacheMode(self.CacheMode.ItemCoordinateCache)
 
     def set_points(self, x1: float, y1: float, x2: float, y2: float) -> None:
         """设置直线端点
