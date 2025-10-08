@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QPen
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsScene, QGraphicsItem
+
+logger = logging.getLogger('drawing_app.ui.canvas_scene')
 
 
 class CanvasScene(QGraphicsScene):
@@ -55,7 +58,7 @@ class CanvasScene(QGraphicsScene):
             p = item.pen()
             base_color = item.data(self._DATA_BASE_COLOR) or p.color()
             base_width = float(item.data(self._DATA_BASE_WIDTH) or p.widthF())
-            print(f"DEBUG: _highlight_style 被调用，基础宽度: {base_width}, 当前宽度: {p.widthF()}")
+            logger.debug(f"_highlight_style 被调用，基础宽度: {base_width}, 当前宽度: {p.widthF()}")
             # 加深颜色，不改变线宽，避免反复触发时越选越粗/越大
             color = QColor(base_color)
             color = color.darker(125)
@@ -65,7 +68,7 @@ class CanvasScene(QGraphicsScene):
             except Exception:
                 pass
             p.setWidthF(base_width)
-            print(f"DEBUG: 设置高亮宽度为: {base_width}")
+            logger.debug(f"设置高亮宽度为: {base_width}")
             item.setPen(p)
 
     def _on_selection_changed(self) -> None:

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import List
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QPen, QBrush, QColor, QPainterPath, QLinearGradient, QPainter
 from PySide6.QtWidgets import QGraphicsPathItem, QStyleOptionGraphicsItem, QWidget
 
 from app.core.shapes.base_item import BaseShapeItem
+
+logger = logging.getLogger('drawing_app.shapes.brush_path')
 
 
 class BrushPathItem(QGraphicsPathItem):
@@ -57,9 +60,9 @@ class BrushPathItem(QGraphicsPathItem):
         self._brush_type = brush_type
         # 如果是从加载来的对象，不要调用 _update_brush_style
         if hasattr(self, '_loaded_from_dict') and self._loaded_from_dict:
-            print(f"DEBUG: set_brush_type 跳过 _update_brush_style，因为是从加载来的对象")
+            logger.debug("set_brush_type 跳过 _update_brush_style，因为是从加载来的对象")
             return
-        print(f"DEBUG: set_brush_type 调用 _update_brush_style，_loaded_from_dict: {getattr(self, '_loaded_from_dict', False)}")
+        logger.debug(f"set_brush_type 调用 _update_brush_style，_loaded_from_dict: {getattr(self, '_loaded_from_dict', False)}")
         self._update_brush_style()
     
     def smoothing_enabled(self) -> bool:
@@ -291,12 +294,12 @@ class BrushPathItem(QGraphicsPathItem):
     def _update_brush_style(self) -> None:
         """根据画笔类型更新样式"""
         pen = self.pen()
-        print(f"DEBUG: _update_brush_style 被调用，当前宽度: {pen.widthF()}, 画笔类型: {self._brush_type}")
-        print(f"DEBUG: _loaded_from_dict 标志: {getattr(self, '_loaded_from_dict', False)}")
+        logger.debug(f"_update_brush_style 被调用，当前宽度: {pen.widthF()}, 画笔类型: {self._brush_type}")
+        logger.debug(f"_loaded_from_dict 标志: {getattr(self, '_loaded_from_dict', False)}")
         
         # 如果是从加载来的对象，不要覆盖宽度
         if hasattr(self, '_loaded_from_dict') and self._loaded_from_dict:
-            print(f"DEBUG: 跳过宽度设置，因为是从加载来的对象")
+            logger.debug("跳过宽度设置，因为是从加载来的对象")
             # 只设置样式，不设置宽度
             if self._brush_type == "pen":
                 pen.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -504,7 +507,7 @@ class BrushPathItem(QGraphicsPathItem):
             
             # 立即标记这是从加载来的对象，避免构造函数或其他方法调用 _update_brush_style
             item._loaded_from_dict = True
-            print(f"DEBUG: 设置 _loaded_from_dict = True")
+            logger.debug("设置 _loaded_from_dict = True")
             
             # 先设置基本属性，但不调用 _update_brush_style
             item._brush_type = data.get("brush_type", "pen")
@@ -514,9 +517,9 @@ class BrushPathItem(QGraphicsPathItem):
             # 应用保存的样式信息
             pen = item.pen()
             if "width" in data:
-                print(f"DEBUG: 设置宽度为 {data['width']}")
+                logger.debug(f"设置宽度为 {data['width']}")
                 pen.setWidthF(float(data["width"]))
-                print(f"DEBUG: 设置后宽度为 {pen.widthF()}")
+                logger.debug(f"设置后宽度为 {pen.widthF()}")
             
             if "stroke" in data:
                 pen.setColor(QColor(data["stroke"]))
