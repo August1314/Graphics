@@ -287,29 +287,55 @@ class BrushTool(BaseTool):
         self._finalize_path()
     
     def _douglas_peucker(self, points: List[QPointF], tolerance: float) -> List[QPointF]:
-        """道格拉斯-普克算法简化路径"""
+        """道格拉斯-普克算法简化路径（迭代版本）
+        
+        性能优化：
+        1. 使用栈实现迭代，避免递归调用
+        2. 添加递归深度限制，防止栈溢出
+        3. 减少内存分配
+        """
         if len(points) <= 2:
             return points
         
-        # 找到距离起点和终点连线最远的点
-        max_distance = 0
-        max_index = 0
-        start = points[0]
-        end = points[-1]
+        # 使用栈实现迭代
+        # 栈中存储 (start_index, end_index) 元组
+        stack = [(0, len(points) - 1)]
+        keep = [False] * len(points)
+        keep[0] = True
+        keep[-1] = True
         
-        for i in range(1, len(points) - 1):
-            distance = self._point_to_line_distance(points[i], start, end)
-            if distance > max_distance:
-                max_distance = distance
-                max_index = i
+        # 递归深度限制
+        max_iterations = 1000
+        iterations = 0
         
-        # 如果最大距离大于容差，递归处理
-        if max_distance > tolerance:
-            left_points = self._douglas_peucker(points[:max_index + 1], tolerance)
-            right_points = self._douglas_peucker(points[max_index:], tolerance)
-            return left_points[:-1] + right_points
-        else:
-            return [start, end]
+        while stack and iterations < max_iterations:
+            iterations += 1
+            start_idx, end_idx = stack.pop()
+            
+            if end_idx - start_idx <= 1:
+                continue
+            
+            # 找到距离起点和终点连线最远的点
+            max_distance = 0
+            max_index = start_idx
+            start = points[start_idx]
+            end = points[end_idx]
+            
+            for i in range(start_idx + 1, end_idx):
+                distance = self._point_to_line_distance(points[i], start, end)
+                if distance > max_distance:
+                    max_distance = distance
+                    max_index = i
+            
+            # 如果最大距离大于容差，标记该点并继续处理两侧
+            if max_distance > tolerance:
+                keep[max_index] = True
+                # 将两个子段压入栈
+                stack.append((start_idx, max_index))
+                stack.append((max_index, end_idx))
+        
+        # 构建简化后的点列表
+        return [points[i] for i in range(len(points)) if keep[i]]
     
     def _point_to_line_distance(self, point: QPointF, line_start: QPointF, line_end: QPointF) -> float:
         """计算点到直线的距离"""
