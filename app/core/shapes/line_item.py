@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPen
-from PySide6.QtWidgets import QGraphicsLineItem
+from PySide6.QtWidgets import QGraphicsLineItem, QStyleOptionGraphicsItem, QWidget
 
 
 class LineItem(QGraphicsLineItem):
@@ -28,3 +29,34 @@ class LineItem(QGraphicsLineItem):
         return cls(float(data.get("x1", 0.0)), float(data.get("y1", 0.0)), float(data.get("x2", 0.0)), float(data.get("y2", 0.0)))
 
 
+
+    def paint(self, painter, option: QStyleOptionGraphicsItem, widget: QWidget | None = None) -> None:  # type: ignore[override]
+        """绘制直线，包含选择高亮
+        
+        用户体验优化：选中时显示虚线边框
+        """
+        # 使用 cosmetic 笔，避免缩放影响
+        pen = QPen(self.pen())
+        try:
+            pen.setCosmetic(True)
+        except Exception:
+            pass
+        
+        painter.save()
+        painter.setRenderHint(painter.RenderHint.Antialiasing, True)
+        painter.setPen(pen)
+        painter.drawLine(self.line())
+        
+        # 选中时绘制虚线高亮
+        if self.isSelected():
+            sel_pen = QPen(QColor(0, 120, 215))
+            sel_pen.setWidth(3)  # 稍粗一点，更明显
+            try:
+                sel_pen.setCosmetic(True)
+            except Exception:
+                pass
+            sel_pen.setStyle(Qt.PenStyle.DashLine)
+            painter.setPen(sel_pen)
+            painter.drawLine(self.line())
+        
+        painter.restore()

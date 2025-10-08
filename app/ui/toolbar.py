@@ -32,27 +32,90 @@ class ToolBar(QToolBar):
         self.action_select.setCheckable(True)
         self.action_select.setData("select")
         self.action_select.setIconVisibleInMenu(True)
+        self.action_select.setToolTip("选择工具 (V)")  # 用户体验优化：添加工具提示
+        self.action_select.setStatusTip("选择和移动图形")
         self._group.addAction(self.action_select)
         self.addAction(self.action_select)
 
-        # 形状动作
-        self.action_point = QAction(self._icons.get("point"), "点", self); self.action_point.setCheckable(True); self.action_point.setData("point"); self.action_point.setIconVisibleInMenu(True); self._group.addAction(self.action_point)
-        self.action_line = QAction(self._icons.get("line"), "直线", self); self.action_line.setCheckable(True); self.action_line.setData("line"); self.action_line.setIconVisibleInMenu(True); self._group.addAction(self.action_line)
-        self.action_rect = QAction(self._icons.get("rect"), "矩形", self); self.action_rect.setCheckable(True); self.action_rect.setData("rect"); self.action_rect.setIconVisibleInMenu(True); self._group.addAction(self.action_rect)
-        self.action_ellipse = QAction(self._icons.get("circle"), "圆", self); self.action_ellipse.setCheckable(True); self.action_ellipse.setData("circle"); self.action_ellipse.setIconVisibleInMenu(True); self._group.addAction(self.action_ellipse)
-        self.action_polygon = QAction(self._icons.get("polygon"), "多边形", self); self.action_polygon.setCheckable(True); self.action_polygon.setData("polygon"); self.action_polygon.setIconVisibleInMenu(True); self._group.addAction(self.action_polygon)
+        # 形状动作（用户体验优化：添加工具提示和状态栏提示）
+        self.action_point = QAction(self._icons.get("point"), "点", self)
+        self.action_point.setCheckable(True)
+        self.action_point.setData("point")
+        self.action_point.setIconVisibleInMenu(True)
+        self.action_point.setToolTip("点工具 (P)")
+        self.action_point.setStatusTip("绘制点")
+        self._group.addAction(self.action_point)
         
-        # 画笔动作（使用独立图标）——本版本移除喷枪入口
-        self.action_brush_pen = QAction(self._icons.get("brush_pen"), "普通画笔", self); self.action_brush_pen.setCheckable(True); self.action_brush_pen.setData("brush_pen"); self.action_brush_pen.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_pen)
-        self.action_brush_marker = QAction(self._icons.get("brush_marker"), "马克笔", self); self.action_brush_marker.setCheckable(True); self.action_brush_marker.setData("brush_marker"); self.action_brush_marker.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_marker)
-        self.action_brush_calligraphy = QAction(self._icons.get("brush_calligraphy"), "书法笔", self); self.action_brush_calligraphy.setCheckable(True); self.action_brush_calligraphy.setData("brush_calligraphy"); self.action_brush_calligraphy.setIconVisibleInMenu(True); self._group.addAction(self.action_brush_calligraphy)
+        self.action_line = QAction(self._icons.get("line"), "直线", self)
+        self.action_line.setCheckable(True)
+        self.action_line.setData("line")
+        self.action_line.setIconVisibleInMenu(True)
+        self.action_line.setToolTip("直线工具 (L)")
+        self.action_line.setStatusTip("绘制直线")
+        self._group.addAction(self.action_line)
         
-        # 橡皮擦动作
-        self.action_eraser = QAction(self._icons.get("eraser"), "橡皮擦", self); self.action_eraser.setCheckable(True); self.action_eraser.setData("eraser"); self.action_eraser.setIconVisibleInMenu(True); self._group.addAction(self.action_eraser)
+        self.action_rect = QAction(self._icons.get("rect"), "矩形", self)
+        self.action_rect.setCheckable(True)
+        self.action_rect.setData("rect")
+        self.action_rect.setIconVisibleInMenu(True)
+        self.action_rect.setToolTip("矩形工具 (R)")
+        self.action_rect.setStatusTip("绘制矩形")
+        self._group.addAction(self.action_rect)
+        
+        self.action_ellipse = QAction(self._icons.get("circle"), "圆", self)
+        self.action_ellipse.setCheckable(True)
+        self.action_ellipse.setData("circle")
+        self.action_ellipse.setIconVisibleInMenu(True)
+        self.action_ellipse.setToolTip("圆形工具 (C)")
+        self.action_ellipse.setStatusTip("绘制圆形")
+        self._group.addAction(self.action_ellipse)
+        
+        self.action_polygon = QAction(self._icons.get("polygon"), "多边形", self)
+        self.action_polygon.setCheckable(True)
+        self.action_polygon.setData("polygon")
+        self.action_polygon.setIconVisibleInMenu(True)
+        self.action_polygon.setToolTip("多边形工具 (G)")
+        self.action_polygon.setStatusTip("绘制多边形，双击完成")
+        self._group.addAction(self.action_polygon)
+        
+        # 画笔动作（用户体验优化：添加工具提示和状态栏提示）
+        self.action_brush_pen = QAction(self._icons.get("brush_pen"), "普通画笔", self)
+        self.action_brush_pen.setCheckable(True)
+        self.action_brush_pen.setData("brush_pen")
+        self.action_brush_pen.setIconVisibleInMenu(True)
+        self.action_brush_pen.setToolTip("普通画笔 (B)")
+        self.action_brush_pen.setStatusTip("使用普通画笔绘制")
+        self._group.addAction(self.action_brush_pen)
+        
+        self.action_brush_marker = QAction(self._icons.get("brush_marker"), "马克笔", self)
+        self.action_brush_marker.setCheckable(True)
+        self.action_brush_marker.setData("brush_marker")
+        self.action_brush_marker.setIconVisibleInMenu(True)
+        self.action_brush_marker.setToolTip("马克笔 (M)")
+        self.action_brush_marker.setStatusTip("使用马克笔绘制")
+        self._group.addAction(self.action_brush_marker)
+        
+        self.action_brush_calligraphy = QAction(self._icons.get("brush_calligraphy"), "书法笔", self)
+        self.action_brush_calligraphy.setCheckable(True)
+        self.action_brush_calligraphy.setData("brush_calligraphy")
+        self.action_brush_calligraphy.setIconVisibleInMenu(True)
+        self.action_brush_calligraphy.setToolTip("书法笔 (K)")
+        self.action_brush_calligraphy.setStatusTip("使用书法笔绘制")
+        self._group.addAction(self.action_brush_calligraphy)
+        
+        # 橡皮擦动作（用户体验优化：添加工具提示和状态栏提示）
+        self.action_eraser = QAction(self._icons.get("eraser"), "橡皮擦", self)
+        self.action_eraser.setCheckable(True)
+        self.action_eraser.setData("eraser")
+        self.action_eraser.setIconVisibleInMenu(True)
+        self.action_eraser.setToolTip("橡皮擦 (E)")
+        self.action_eraser.setStatusTip("擦除图形")
+        self._group.addAction(self.action_eraser)
 
-        # 下拉按钮"图形"
+        # 下拉按钮"图形"（用户体验优化：添加工具提示）
         self.shape_button = QToolButton(self)
         self.shape_button.setText("图形")
+        self.shape_button.setToolTip("选择图形工具")
         # 点击整个按钮直接弹出菜单
         self.shape_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.shape_menu = QMenu(self.shape_button)
@@ -61,9 +124,10 @@ class ToolBar(QToolBar):
         self.shape_button.setMenu(self.shape_menu)
         self.addWidget(self.shape_button)
         
-        # 下拉按钮"画笔"
+        # 下拉按钮"画笔"（用户体验优化：添加工具提示）
         self.brush_button = QToolButton(self)
         self.brush_button.setText("画笔")
+        self.brush_button.setToolTip("选择画笔工具")
         # 点击整个按钮直接弹出菜单
         self.brush_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.brush_menu = QMenu(self.brush_button)
