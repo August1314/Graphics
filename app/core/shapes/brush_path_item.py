@@ -450,7 +450,11 @@ class BrushPathItem(QGraphicsPathItem):
         return rect.center()
     
     def set_center(self, center: QPointF) -> None:
-        """设置图元中心点"""
+        """设置图元中心点
+        
+        性能优化：调用 prepareGeometryChange() 通知场景几何变化
+        """
+        self.prepareGeometryChange()
         rect = self.boundingRect()
         current_center = rect.center()
         offset = center - current_center

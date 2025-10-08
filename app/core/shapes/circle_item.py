@@ -14,6 +14,11 @@ class CircleItem(QGraphicsEllipseItem):
         self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
 
     def set_center_radius(self, cx: float, cy: float, r: float) -> None:
+        """设置圆心和半径
+        
+        性能优化：调用 prepareGeometryChange() 通知场景几何变化
+        """
+        self.prepareGeometryChange()
         self.setPos(cx, cy)
         self.setRect(-r, -r, 2 * r, 2 * r)
 

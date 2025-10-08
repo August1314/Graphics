@@ -16,6 +16,11 @@ class PolygonItem(QGraphicsPolygonItem):
             self.set_polygon(points)
 
     def set_polygon(self, points: list[QPointF]) -> None:
+        """设置多边形顶点
+        
+        性能优化：调用 prepareGeometryChange() 通知场景几何变化
+        """
+        self.prepareGeometryChange()
         self.setPolygon(QPolygonF(points))
 
     @classmethod

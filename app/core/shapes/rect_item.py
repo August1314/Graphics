@@ -13,6 +13,11 @@ class RectItem(QGraphicsRectItem):
         self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
 
     def set_geometry(self, x: float, y: float, w: float, h: float) -> None:
+        """设置矩形几何
+        
+        性能优化：调用 prepareGeometryChange() 通知场景几何变化
+        """
+        self.prepareGeometryChange()
         self.setRect(x, y, w, h)
 
     @classmethod

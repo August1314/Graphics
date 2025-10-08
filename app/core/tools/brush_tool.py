@@ -160,13 +160,9 @@ class BrushTool(BaseTool):
                         self._current_item.setPen(pen)
                 except Exception:
                     pass
-            # 强制刷新，保证按下时可见
-            # 强制刷新当前项与场景
+            # 性能优化：只更新当前图元，不刷新整个场景
+            # 使用局部更新而非全场景刷新
             self._current_item.update()
-            try:
-                scene.invalidate(scene.sceneRect())
-            except Exception:
-                scene.update()
     
     def on_release(self, scene: QGraphicsScene, scene_pos: QPointF, event: QMouseEvent) -> None:
         """结束绘制路径"""

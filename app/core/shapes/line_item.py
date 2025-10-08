@@ -12,6 +12,11 @@ class LineItem(QGraphicsLineItem):
         self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
 
     def set_points(self, x1: float, y1: float, x2: float, y2: float) -> None:
+        """设置直线端点
+        
+        性能优化：调用 prepareGeometryChange() 通知场景几何变化
+        """
+        self.prepareGeometryChange()
         self.setLine(x1, y1, x2, y2)
 
     @classmethod
