@@ -10,7 +10,8 @@ conda activate pnt
 ### 2. 运行测试
 ```bash
 # 快速测试（推荐）
-python test_basic.py
+python tests/manual/test_basic.py
+python tests/manual/test_phase3_simple.py
 
 # 完整单元测试
 pytest tests/unit/ -v

@@ -1,0 +1,630 @@
+from __future__ import annotations
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QKeySequence, QCursor
+from PySide6.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QDockWidget, QWidget, QVBoxLayout, QPushButton
+
+from app.ui.canvas_view import CanvasView
+from app.ui.canvas_scene import CanvasScene
+from app.ui.toolbar import ToolBar
+from app.ui.property_panel import PropertyPanel
+from PySide6.QtGui import QUndoStack
+from app.core.commands.add_shape_cmd import AddShapeCommand
+from app.core.commands.delete_shape_cmd import DeleteShapeCommand
+from app.core.commands.move_shape_cmd import MoveShapeCommand
+from app.core.commands.update_style_cmd import UpdateStyleCommand
+from app.core.shapes.point_item import PointItem
+from app.core.shapes.line_item import LineItem
+from app.core.shapes.rect_item import RectItem
+from app.core.shapes.polygon_item import PolygonItem
+from app.core.shapes.brush_path_item import BrushPathItem
+from app.core.tools.eraser_tool import EraserTool
+
+
+class MainWindow(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("二维图形绘图系统")
+        self.resize(1000, 700)
+
+        self.scene = CanvasScene(self)
+        self.view = CanvasView(self.scene, self)
+        self.setCentralWidget(self.view)
+
+        self.undo_stack = QUndoStack(self)
+        try:
+            self.undo_stack.indexChanged.connect(self._on_undo_index_changed)
+        except Exception:
+            pass
+
+        self._restore_prev_selection_enabled: bool = True
+        self._prev_selected_items: list = []
+
+        self._init_menu()
+        self._init_status_bar()
+        self._init_toolbar()
+        self._init_docks()
+        self._apply_modern_style()
+
+    def _init_menu(self) -> None:
+        try:
+            self.menuBar().setNativeMenuBar(False)
+        except Exception:
+            pass
+        menu = self.menuBar()
+        file_menu = menu.addMenu("文件")
+        settings_menu = menu.addMenu("设置")
+        edit_menu = menu.addMenu("编辑")
+        self.view_menu = menu.addMenu("视图")
+
+        action_open = QAction("打开...", self)
+        action_open.setShortcut("Ctrl+O")
+        action_open.triggered.connect(self._on_open)
+
+        action_save_png = QAction("导出PNG...", self)
+        action_save_png.triggered.connect(self._on_export_png)
+
+        action_quit = QAction("退出", self)
+        action_quit.setShortcut("Ctrl+Q")
+        action_quit.triggered.connect(self.close)
+
+        file_menu.addAction(action_open)
+        file_menu.addAction(action_save_png)
+        file_menu.addSeparator()
+        file_menu.addAction(action_quit)
+
+        self.action_restore_prev_selection = QAction("切回‘选择’时恢复上次选择", self)
+        self.action_restore_prev_selection.setCheckable(True)
+        self.action_restore_prev_selection.setChecked(self._restore_prev_selection_enabled)
+        self.action_restore_prev_selection.toggled.connect(self._on_toggle_restore_prev_selection)
+        settings_menu.addAction(self.action_restore_prev_selection)
+
+        action_undo = self.undo_stack.createUndoAction(self, "撤销")
+        action_redo = self.undo_stack.createRedoAction(self, "重做")
+        action_undo.setShortcut(QKeySequence.Undo)
+        action_redo.setShortcut(QKeySequence.Redo)
+        edit_menu.addAction(action_undo)
+        edit_menu.addAction(action_redo)
+
+    def _init_status_bar(self) -> None:
+        self.statusBar().showMessage("就绪")
+
+    def _init_toolbar(self) -> None:
+        self.tools = ToolBar(self)
+        self.addToolBar(self.tools)
+        self.tools.toolChanged.connect(self._on_tool_changed)
+        try:
+            if hasattr(self.tools, 'quickStrokeColorChanged'):
+                self.tools.quickStrokeColorChanged.connect(self._on_quick_color)
+            if hasattr(self.tools, 'quickStrokeWidthChanged'):
+                self.tools.quickStrokeWidthChanged.connect(self._on_quick_width)
+            if hasattr(self.tools, 'quickStrokeDashChanged'):
+                self.tools.quickStrokeDashChanged.connect(self._on_quick_dash)
+        except Exception:
+            pass
+
+    def _init_docks(self) -> None:
+        self.prop_dock = QDockWidget("属性", self)
+        self.prop_dock.setObjectName("dock_properties")
+        self.prop_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.property_panel = PropertyPanel(self)
+        self.prop_dock.setWidget(self.property_panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.prop_dock)
+        prop_toggle_action = self.prop_dock.toggleViewAction()
+        prop_toggle_action.setText("属性面板")
+        prop_toggle_action.setShortcut("F7")
+        self.view_menu.addAction(prop_toggle_action)
+
+        io_dock = QDockWidget("文件", self)
+        io_dock.setObjectName("dock_io")
+        io_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+
+        container = QWidget(self)
+        v = QVBoxLayout(container)
+        btn_save = QPushButton("保存为 JSON")
+        btn_load = QPushButton("加载 JSON")
+        btn_save.clicked.connect(self._on_save_json)
+        btn_load.clicked.connect(self._on_load_json)
+        v.addWidget(btn_save)
+        v.addWidget(btn_load)
+        v.addStretch(1)
+        io_dock.setWidget(container)
+        self.addDockWidget(Qt.RightDockWidgetArea, io_dock)
+
+        self.scene.selectionChanged.connect(self._on_scene_selection_changed)
+        pp = self.property_panel
+        pp.set_enabled(False)
+        pp.centerChanged.connect(self._on_center_changed)
+        pp.radiusChanged.connect(self._on_radius_changed)
+        pp.lineP1Changed.connect(self._on_line_p1_changed)
+        pp.lineP2Changed.connect(self._on_line_p2_changed)
+        pp.strokeColorChanged.connect(self._on_stroke_color_changed)
+        pp.strokeWidthChanged.connect(self._on_stroke_width_changed)
+        pp.fillColorChanged.connect(self._on_fill_color_changed)
+        pp.opacityChanged.connect(self._on_opacity_changed)
+        pp.combo_dash.currentIndexChanged.connect(self._on_dash_style_changed)
+
+        self.view.shapeCommitted.connect(self._on_shape_committed)
+        self.view.moveCommitted.connect(self._on_move_committed)
+        self.view.deleteRequested.connect(self._on_delete_requested)
+        self.view.selectionGeometryChanged.connect(self._on_scene_selection_changed)
+
+        self._delete_action = QAction("删除", self)
+        self._delete_action.setShortcut("Delete")
+        self._delete_action.triggered.connect(self._on_delete_selected)
+        self.addAction(self._delete_action)
+
+    # ---- 快速笔触到画布样式 ----
+    def _on_quick_color(self, color) -> None:
+        try:
+            self.view._current_pen_color = color
+        except Exception:
+            pass
+
+    def _on_quick_width(self, w: float) -> None:
+        try:
+            self.view._current_pen_width = float(w)
+        except Exception:
+            pass
+
+    def _on_quick_dash(self, style) -> None:
+        try:
+            self.view._current_pen_style = style
+        except Exception:
+            pass
+
+    def _apply_modern_style(self) -> None:
+        self.setStyleSheet(
+            """
+            QMainWindow { background: #f5f7fb; }
+            QToolBar { background: rgba(255,255,255,0.9); border: none; padding: 6px; spacing: 8px; }
+            QToolBar QToolButton { padding: 6px 10px; border-radius: 6px; }
+            QToolBar QToolButton:hover { background: rgba(0,0,0,0.06); }
+            QDockWidget::title { padding: 6px 10px; background: rgba(0,0,0,0.04); border-bottom: 1px solid rgba(0,0,0,0.06); }
+            QPushButton { border-radius: 6px; padding: 6px 12px; }
+            QComboBox, QSpinBox, QDoubleSpinBox { padding: 4px 8px; border-radius: 6px; }
+            QMenu { border-radius: 6px; padding: 6px; }
+            """
+        )
+
+    def _on_open(self) -> None:
+        QFileDialog.getOpenFileName(self, "打开文件", "", "JSON 文件 (*.json)")
+
+    def _on_export_png(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "导出 PNG", "scene.png", "PNG 文件 (*.png)")
+        if not path:
+            return
+        ok = self.view.export_png(path)
+        if ok:
+            self.statusBar().showMessage(f"已导出: {path}")
+        else:
+            QMessageBox.warning(self, "导出失败", "导出 PNG 失败")
+
+    def _on_tool_changed(self, name: str) -> None:
+        self.statusBar().showMessage(f"当前工具：{name}")
+        self.view.set_tool(name)
+        if name == "eraser":
+            eraser_tool = self._get_selected_eraser_tool()
+            if eraser_tool is not None:
+                self.property_panel.build_for(eraser_tool, "eraser", self.scene, self.undo_stack)
+                self.property_panel.set_enabled(True)
+                return
+        if name != "select":
+            self._prev_selected_items = [item for item in self.scene.selectedItems()]
+            self.scene.clearSelection()
+        else:
+            if self._restore_prev_selection_enabled and self._prev_selected_items:
+                for item in list(self._prev_selected_items):
+                    if item.scene() is self.scene:
+                        item.setSelected(True)
+
+    def _on_toggle_restore_prev_selection(self, checked: bool) -> None:
+        self._restore_prev_selection_enabled = checked
+
+    def _get_selected_circle(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        from app.core.shapes.circle_item import CircleItem
+        if isinstance(item, CircleItem):
+            return item
+        return None
+
+    def _get_selected_point(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, PointItem):
+            return item
+        return None
+
+    def _get_selected_line(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, LineItem):
+            return item
+        return None
+
+    def _get_selected_rect(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, RectItem):
+            return item
+        return None
+
+    def _get_selected_polygon(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, PolygonItem):
+            return item
+        return None
+
+    def _get_selected_brush_path(self):
+        items = self.scene.selectedItems()
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item, BrushPathItem):
+            return item
+        return None
+
+    def _get_selected_eraser_tool(self):
+        try:
+            if hasattr(self.view, '_tool') and isinstance(self.view._tool, EraserTool):
+                return self.view._tool
+        except Exception:
+            pass
+        return None
+
+    def _on_scene_selection_changed(self) -> None:
+        try:
+            if getattr(self.view, "_rubber_selecting", False):
+                return
+        except Exception:
+            pass
+        circle = self._get_selected_circle()
+        if circle is not None:
+            self.property_panel.set_mode("circle")
+            self.property_panel.build_for(circle, "circle", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        point = self._get_selected_point()
+        if point is not None:
+            self.property_panel.set_mode("point")
+            self.property_panel.build_for(point, "point", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            self.property_panel.set_mode("line")
+            self.property_panel.build_for(line, "line", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        rect = self._get_selected_rect()
+        if rect is not None:
+            try:
+                if getattr(self.view, "_rubber_selecting", False):
+                    return
+            except Exception:
+                pass
+            self.property_panel.build_for(rect, "rect", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        poly = self._get_selected_polygon()
+        if poly is not None:
+            self.property_panel.build_for(poly, "polygon", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        brush_path = self._get_selected_brush_path()
+        if brush_path is not None:
+            self.property_panel.build_for(brush_path, "brush_path", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        eraser_tool = self._get_selected_eraser_tool()
+        if eraser_tool is not None:
+            self.property_panel.build_for(eraser_tool, "eraser", self.scene, self.undo_stack)
+            self.property_panel.set_enabled(True)
+            return
+        self.property_panel.set_enabled(False)
+
+    def _on_center_changed(self, cx: float, cy: float) -> None:
+        try:
+            if getattr(self.view, "_rubber_selecting", False):
+                return
+        except Exception:
+            pass
+        circle = self._get_selected_circle()
+        if circle is None:
+            point = self._get_selected_point()
+            if point is None:
+                return
+            ox, oy = point.pos().x(), point.pos().y()
+            def apply():
+                point.setPos(cx, cy)
+            def revert():
+                point.setPos(ox, oy)
+            self.undo_stack.push(UpdateStyleCommand.make("移动点", apply, revert))
+            return
+        ox, oy, r = circle.center_radius()
+        def apply():
+            circle.set_center_radius(cx, cy, r)
+        def revert():
+            circle.set_center_radius(ox, oy, r)
+        self.undo_stack.push(UpdateStyleCommand.make("修改中心", apply, revert))
+
+    def _on_radius_changed(self, r: float) -> None:
+        try:
+            if getattr(self.view, "_rubber_selecting", False):
+                return
+        except Exception:
+            pass
+        circle = self._get_selected_circle()
+        if circle is None:
+            point = self._get_selected_point()
+            if point is None:
+                return
+            rect = point.rect(); old_r = rect.width() / 2.0
+            nr = max(0.1, r)
+            def apply():
+                point.setRect(-nr, -nr, 2*nr, 2*nr)
+            def revert():
+                point.setRect(-old_r, -old_r, 2*old_r, 2*old_r)
+            self.undo_stack.push(UpdateStyleCommand.make("修改点半径", apply, revert))
+            return
+        cx, cy, old_r = circle.center_radius()
+        nr = max(0.0, r)
+        def apply():
+            circle.set_center_radius(cx, cy, nr)
+        def revert():
+            circle.set_center_radius(cx, cy, old_r)
+        self.undo_stack.push(UpdateStyleCommand.make("修改半径", apply, revert))
+
+    def _on_stroke_color_changed(self, color) -> None:
+        circle = self._get_selected_circle()
+        if circle is not None:
+            pen = circle.pen(); old = pen.color()
+            def apply():
+                p = circle.pen(); p.setColor(color); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            def revert():
+                p = circle.pen(); p.setColor(old); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改描边颜色", apply, revert))
+            return
+        point = self._get_selected_point()
+        if point is not None:
+            pen = point.pen(); old = pen.color()
+            def apply():
+                p = point.pen(); p.setColor(color); point.setPen(p)
+                self.scene.update_base_style(point)
+            def revert():
+                p = point.pen(); p.setColor(old); point.setPen(p)
+                self.scene.update_base_style(point)
+            self.undo_stack.push(UpdateStyleCommand.make("修改描边颜色", apply, revert))
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            pen = line.pen(); old = pen.color()
+            def apply():
+                p = line.pen(); p.setColor(color); line.setPen(p)
+                self.scene.update_base_style(line)
+            def revert():
+                p = line.pen(); p.setColor(old); line.setPen(p)
+                self.scene.update_base_style(line)
+            self.undo_stack.push(UpdateStyleCommand.make("修改描边颜色", apply, revert))
+
+    def _on_stroke_width_changed(self, width: int) -> None:
+        nw = max(0.1, float(width))
+        circle = self._get_selected_circle()
+        if circle is not None:
+            old = circle.pen().widthF()
+            def apply():
+                p = circle.pen(); p.setWidthF(nw); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            def revert():
+                p = circle.pen(); p.setWidthF(old); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线宽", apply, revert))
+            return
+        point = self._get_selected_point()
+        if point is not None:
+            old = point.pen().widthF()
+            def apply():
+                p = point.pen(); p.setWidthF(nw); point.setPen(p)
+                self.scene.update_base_style(point)
+            def revert():
+                p = point.pen(); p.setWidthF(old); point.setPen(p)
+                self.scene.update_base_style(point)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线宽", apply, revert))
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            old = line.pen().widthF()
+            def apply():
+                p = line.pen(); p.setWidthF(nw); line.setPen(p)
+                self.scene.update_base_style(line)
+            def revert():
+                p = line.pen(); p.setWidthF(old); line.setPen(p)
+                self.scene.update_base_style(line)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线宽", apply, revert))
+
+    def _on_fill_color_changed(self, color) -> None:
+        from PySide6.QtGui import QBrush
+        circle = self._get_selected_circle()
+        if circle is not None:
+            old = circle.brush().color()
+            def apply():
+                circle.setBrush(QBrush(color))
+                self.scene.update_base_style(circle)
+            def revert():
+                circle.setBrush(QBrush(old))
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改填充颜色", apply, revert))
+            return
+        point = self._get_selected_point()
+        if point is not None:
+            old = point.brush().color()
+            def apply():
+                point.setBrush(QBrush(color))
+                self.scene.update_base_style(point)
+            def revert():
+                point.setBrush(QBrush(old))
+                self.scene.update_base_style(point)
+            self.undo_stack.push(UpdateStyleCommand.make("修改填充颜色", apply, revert))
+
+    def _on_opacity_changed(self, pct: int) -> None:
+        new = max(0.0, min(1.0, pct / 100.0))
+        circle = self._get_selected_circle()
+        if circle is not None:
+            old = circle.opacity()
+            def apply():
+                circle.setOpacity(new)
+                self.scene.update_base_style(circle)
+            def revert():
+                circle.setOpacity(old)
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改不透明度", apply, revert))
+            return
+        point = self._get_selected_point()
+        if point is not None:
+            old = point.opacity()
+            def apply():
+                point.setOpacity(new)
+                self.scene.update_base_style(point)
+            def revert():
+                point.setOpacity(old)
+                self.scene.update_base_style(point)
+            self.undo_stack.push(UpdateStyleCommand.make("修改不透明度", apply, revert))
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            old = line.opacity()
+            def apply():
+                line.setOpacity(new)
+                self.scene.update_base_style(line)
+            def revert():
+                line.setOpacity(old)
+                self.scene.update_base_style(line)
+            self.undo_stack.push(UpdateStyleCommand.make("修改不透明度", apply, revert))
+
+    def _on_dash_style_changed(self, idx: int) -> None:
+        from PySide6.QtCore import Qt as _Qt
+        new = _Qt.PenStyle.SolidLine if idx == 0 else _Qt.PenStyle.DashLine
+        circle = self._get_selected_circle()
+        if circle is not None:
+            old = circle.pen().style()
+            def apply():
+                p = circle.pen(); p.setStyle(new); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            def revert():
+                p = circle.pen(); p.setStyle(old); circle.setPen(p)
+                self.scene.update_base_style(circle)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线型", apply, revert))
+            return
+        line = self._get_selected_line()
+        if line is not None:
+            old = line.pen().style()
+            def apply():
+                p = line.pen(); p.setStyle(new); line.setPen(p)
+                self.scene.update_base_style(line)
+            def revert():
+                p = line.pen(); p.setStyle(old); line.setPen(p)
+                self.scene.update_base_style(line)
+            self.undo_stack.push(UpdateStyleCommand.make("修改线型", apply, revert))
+
+    def _on_delete_selected(self) -> None:
+        for item in list(self.scene.selectedItems()):
+            self.undo_stack.push(DeleteShapeCommand(self.scene, item))
+
+    def _on_line_p1_changed(self, x1: float, y1: float) -> None:
+        line = self._get_selected_line()
+        if line is None:
+            return
+        ln = line.line(); old = (ln.x1(), ln.y1(), ln.x2(), ln.y2())
+        def apply():
+            line.set_points(x1, y1, old[2], old[3])
+        def revert():
+            line.set_points(old[0], old[1], old[2], old[3])
+        self.undo_stack.push(UpdateStyleCommand.make("修改直线起点", apply, revert))
+
+    def _on_line_p2_changed(self, x2: float, y2: float) -> None:
+        line = self._get_selected_line()
+        if line is None:
+            return
+        ln = line.line(); old = (ln.x1(), ln.y1(), ln.x2(), ln.y2())
+        def apply():
+            line.set_points(old[0], old[1], x2, y2)
+        def revert():
+            line.set_points(old[0], old[1], old[2], old[3])
+        self.undo_stack.push(UpdateStyleCommand.make("修改直线终点", apply, revert))
+
+    def _on_shape_committed(self, item) -> None:
+        self.undo_stack.push(AddShapeCommand(self.scene, item))
+
+    def _on_move_committed(self, item, old_pos, new_pos) -> None:
+        self.undo_stack.push(MoveShapeCommand(item, old_pos, new_pos))
+
+    def _on_delete_requested(self, item) -> None:
+        self.undo_stack.push(DeleteShapeCommand(self.scene, item))
+
+    def _on_save_json(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "保存为 JSON", "scene.json", "JSON 文件 (*.json)")
+        if not path:
+            return
+        try:
+            import json
+            from app.core.serializer import dump
+            data = dump(self.scene)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            self.statusBar().showMessage(f"已保存: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", str(e))
+
+    def _on_load_json(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "加载 JSON", "", "JSON 文件 (*.json)")
+        if not path:
+            return
+        try:
+            import json
+            from app.core.serializer import load
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for it in list(self.scene.items()):
+                try:
+                    self.scene.removeItem(it)
+                except Exception:
+                    pass
+            load(data, self.scene)
+            self.statusBar().showMessage(f"已加载: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "加载失败", str(e))
+
+    def _on_undo_index_changed(self, *_args) -> None:
+        try:
+            from shiboken6 import isValid  # type: ignore
+        except Exception:
+            def isValid(obj):
+                try:
+                    return obj is not None
+                except Exception:
+                    return False
+        if not isValid(self.scene) or not isValid(self.property_panel):
+            return
+        self._on_scene_selection_changed()
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        try:
+            self.undo_stack.indexChanged.disconnect(self._on_undo_index_changed)
+        except Exception:
+            pass
+        super().closeEvent(event)
+

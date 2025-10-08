@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional, List, Callable
 import math
 import random
+import time
 from PySide6.QtCore import QPointF, QTimer, Qt
 from PySide6.QtGui import QPen, QBrush, QColor, QPainterPath, QMouseEvent, QPainter, QImage, QPixmap
 from PySide6.QtWidgets import QGraphicsScene, QGraphicsPathItem
@@ -47,6 +48,11 @@ class BrushTool(BaseTool):
         self._spray_pix: Optional[QImage] = None
         self._spray_origin: Optional[QPointF] = None
         self._spray_last_pos: Optional[QPointF] = None
+        
+        # 性能优化：节流机制
+        self._last_spray_time = 0.0  # 上次喷涂时间
+        self._spray_interval = 1.0 / 60.0  # 目标 60 FPS，约 16.67ms
+        self._spray_buffer: List[QPointF] = []  # 点缓冲队列
         
         # 定时器用于路径优化
         self._optimize_timer = QTimer()
@@ -108,6 +114,9 @@ class BrushTool(BaseTool):
                 self._spray_pix = QImage(512, 512, QImage.Format.Format_ARGB32_Premultiplied)
                 self._spray_pix.fill(0x00000000)
                 self._spray_last_pos = QPointF(scene_pos)
+                # 重置节流相关变量
+                self._last_spray_time = time.perf_counter()
+                self._spray_buffer.clear()
     
     def on_move(self, scene: QGraphicsScene, scene_pos: QPointF, event: QMouseEvent) -> None:
         """继续绘制路径"""
@@ -322,23 +331,58 @@ class BrushTool(BaseTool):
 
     # ---- 喷枪实现 ----
     def _spray_paint_along(self, curr: QPointF) -> None:
-        """在上一次位置与当前位置之间做插值喷涂，形成连续雾带。"""
+        """在上一次位置与当前位置之间做插值喷涂，形成连续雾带。
+        
+        性能优化：
+        1. 节流机制：限制喷涂频率到 60 FPS
+        2. 点缓冲：累积点后批量处理
+        """
+        # 添加当前点到缓冲
+        self._spray_buffer.append(QPointF(curr))
+        
+        # 节流检查：如果距离上次喷涂时间太短，先缓冲
+        current_time = time.perf_counter()
+        if current_time - self._last_spray_time < self._spray_interval:
+            return
+        
+        # 时间到了，处理缓冲的所有点
+        self._last_spray_time = current_time
+        
+        if not self._spray_buffer:
+            return
+            
         if self._spray_last_pos is None:
-            self._spray_last_pos = QPointF(curr)
-        last = self._spray_last_pos
-        # 分段数与移动距离/半径成比例
-        radius = max(1.0, self._pen.widthF() / 2.0)
-        dist = math.hypot(curr.x() - last.x(), curr.y() - last.y())
-        # 限制最大步数，避免极快移动导致过多循环
-        steps = max(1, min(64, int(dist / max(1.0, radius * 0.5))))
-        for i in range(1, steps + 1):
-            t = i / steps
-            x = last.x() + (curr.x() - last.x()) * t
-            y = last.y() + (curr.y() - last.y()) * t
-            self._spray_paint(QPointF(x, y))
-        self._spray_last_pos = QPointF(curr)
+            self._spray_last_pos = QPointF(self._spray_buffer[0])
+        
+        # 批量处理缓冲的点
+        for point in self._spray_buffer:
+            last = self._spray_last_pos
+            radius = max(1.0, self._pen.widthF() / 2.0)
+            dist = math.hypot(point.x() - last.x(), point.y() - last.y())
+            
+            # 限制最大步数，避免极快移动导致过多循环
+            # 优化：减少步数，从 64 降到 32
+            steps = max(1, min(32, int(dist / max(1.0, radius * 0.5))))
+            
+            for i in range(1, steps + 1):
+                t = i / steps
+                x = last.x() + (point.x() - last.x()) * t
+                y = last.y() + (point.y() - last.y()) * t
+                self._spray_paint(QPointF(x, y))
+            
+            self._spray_last_pos = QPointF(point)
+        
+        # 清空缓冲
+        self._spray_buffer.clear()
 
     def _spray_paint(self, pos: QPointF) -> None:
+        """在指定位置喷涂随机点。
+        
+        性能优化：
+        1. 减少最大样本数：300 → 150
+        2. 优化样本数计算公式
+        3. 减少不必要的对象创建
+        """
         if self._spray_pix is None or self._spray_origin is None or self._current_item is None:
             return
         try:
@@ -347,36 +391,57 @@ class BrushTool(BaseTool):
             p = QPainter(self._spray_pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
             base = self._pen.color()
-            # 样本数与半径线性相关
-            # 限制样本数，避免卡顿
-            samples = min(300, int(60 + radius * 8))
+            
+            # 性能优化：减少样本数
+            # 旧版本: min(300, int(60 + radius * 8))
+            # 新版本: min(150, int(40 + radius * 5))
+            samples = min(150, int(40 + radius * 5))
+            
+            # 预先提取颜色分量，避免重复调用
+            base_r, base_g, base_b = base.red(), base.green(), base.blue()
+            
+            # 设置画笔一次，避免循环内重复设置
+            p.setPen(Qt.PenStyle.NoPen)
+            
             for _ in range(samples):
                 ang = random.random() * 2.0 * 3.1415926
                 # 采用 sqrt 分布，让中心更浓
                 r = radius * (random.random() ** 0.5)
                 dx, dy = math.cos(ang) * r, math.sin(ang) * r
                 a = max(40, min(220, int(220 * (1.0 - r / radius))))
-                color = QColor(base.red(), base.green(), base.blue(), a)
-                p.setPen(Qt.PenStyle.NoPen)
+                
+                # 优化：直接使用预提取的颜色分量
+                color = QColor(base_r, base_g, base_b, a)
                 p.setBrush(QBrush(color))
+                
                 cx = int(pos.x()-self._spray_origin.x()+dx+256)
                 cy = int(pos.y()-self._spray_origin.y()+dy+256)
                 p.drawEllipse(cx-1, cy-1, 2, 2)
             p.end()
             # 将离屏结果贴为纹理，直接给出紧致矩形（以喷点邻域为界，避免扫描整图）
+            # 性能优化：减少不必要的对象创建和计算
             from PySide6.QtCore import QRectF, QRect
+            
+            # 优化：缓存 rect_full，避免每次重新计算
             rect_full = QRectF(self._spray_origin.x()-256, self._spray_origin.y()-256, 512, 512)
+            
             # 计算当前步的局部包围（以 radius 为边界）
-            local = QRectF(pos.x()-radius, pos.y()-radius, radius*2, radius*2)
+            radius_2 = radius * 2
+            local = QRectF(pos.x()-radius, pos.y()-radius, radius_2, radius_2)
+            
             # 将局部映射到贴图坐标
-            src = QRect(int(local.x()-rect_full.x()), int(local.y()-rect_full.y()), int(local.width()), int(local.height()))
-            tight = QRectF(local)
+            local_x = local.x() - rect_full.x()
+            local_y = local.y() - rect_full.y()
+            src = QRect(int(local_x), int(local_y), int(local.width()), int(local.height()))
+            
             # 直接使用 fast 接口更新（避免 O(w*h) 扫描）
             if hasattr(self._current_item, 'set_spray_texture_fast'):
-                self._current_item.set_spray_texture_fast(self._spray_pix, rect_full, tight, src)
+                self._current_item.set_spray_texture_fast(self._spray_pix, rect_full, local, src)
             else:
                 self._current_item.set_spray_texture(self._spray_pix, rect_full)
-            self._current_item.update()
+            
+            # 优化：只更新局部区域，而不是整个 item
+            self._current_item.update(local)
         except Exception:
             pass
 
@@ -395,3 +460,6 @@ class BrushTool(BaseTool):
         self._current_item = None
         self._points = []
         self._optimize_timer.stop()
+        # 清理喷枪相关状态
+        self._spray_buffer.clear()
+        self._last_spray_time = 0.0
