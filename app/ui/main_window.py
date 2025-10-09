@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow, QDockWidget, QWidget, 
-    QVBoxLayout, QPushButton
+    QVBoxLayout, QPushButton, QLabel
 )
 
 from app.ui.canvas_view import CanvasView
@@ -74,8 +74,9 @@ class MainWindow(QMainWindow):
         self.tool_manager = ToolManager(self.view, self)
         self.state_machine = ViewStateMachine(self)
         
-        # 设置中心部件
+        # 设置中心部件（全出血，无边距）
         self.setCentralWidget(self.view)
+        self.setContentsMargins(0, 0, 0, 0)
         
         # 初始化 UI
         self._init_menu()
@@ -86,6 +87,10 @@ class MainWindow(QMainWindow):
         
         # 连接信号
         self._connect_signals()
+        
+        # 初始化状态栏显示
+        self._update_objects_count()
+        self._update_zoom_level()
         
         logger.info("主窗口初始化完成")
     
@@ -155,11 +160,39 @@ class MainWindow(QMainWindow):
         # 视图菜单
         self.view_menu = menu.addMenu("视图")
         
+        # 帮助菜单
+        help_menu = menu.addMenu("帮助")
+        
+        action_about = QAction("关于", self)
+        action_about.triggered.connect(self._show_about_dialog)
+        
+        help_menu.addAction(action_about)
+        
         logger.debug("菜单栏初始化完成")
     
     def _init_status_bar(self) -> None:
         """初始化状态栏"""
-        self.statusBar().showMessage("就绪")
+        status_bar = self.statusBar()
+        
+        # 创建状态栏标签
+        self._status_tool_label = QLabel("工具: 选择")
+        self._status_pos_label = QLabel("位置: -")
+        self._status_zoom_label = QLabel("缩放: 100%")
+        self._status_objects_label = QLabel("对象: 0")
+        
+        # 添加到状态栏
+        status_bar.addWidget(self._status_tool_label)
+        status_bar.addWidget(QLabel(" | "))
+        status_bar.addWidget(self._status_pos_label)
+        status_bar.addWidget(QLabel(" | "))
+        status_bar.addWidget(self._status_zoom_label)
+        status_bar.addWidget(QLabel(" | "))
+        status_bar.addWidget(self._status_objects_label)
+        
+        # 添加弹性空间
+        status_bar.addPermanentWidget(QLabel(""))
+        
+        logger.debug("状态栏初始化完成")
     
     def _init_toolbar(self) -> None:
         """初始化工具栏"""
@@ -195,31 +228,15 @@ class MainWindow(QMainWindow):
         self.prop_dock.setWidget(self.property_panel)
         self.addDockWidget(Qt.RightDockWidgetArea, self.prop_dock)
         
+        # 优化属性面板默认尺寸
+        self.prop_dock.setMinimumWidth(280)
+        self.prop_dock.setMaximumWidth(400)
+        
         # 添加到视图菜单
         prop_toggle = self.prop_dock.toggleViewAction()
         prop_toggle.setText("属性面板")
         prop_toggle.setShortcut("F7")
         self.view_menu.addAction(prop_toggle)
-        
-        # 文件操作面板
-        io_dock = QDockWidget("文件", self)
-        io_dock.setObjectName("dock_io")
-        io_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        
-        container = QWidget(self)
-        layout = QVBoxLayout(container)
-        
-        btn_save = QPushButton("保存为 JSON")
-        btn_load = QPushButton("加载 JSON")
-        btn_save.clicked.connect(self.doc_controller.save_document)
-        btn_load.clicked.connect(self.doc_controller.load_document)
-        
-        layout.addWidget(btn_save)
-        layout.addWidget(btn_load)
-        layout.addStretch(1)
-        
-        io_dock.setWidget(container)
-        self.addDockWidget(Qt.RightDockWidgetArea, io_dock)
         
         logger.debug("停靠窗口初始化完成")
     
@@ -227,28 +244,121 @@ class MainWindow(QMainWindow):
         """应用现代化样式"""
         self.setStyleSheet(
             """
-            QMainWindow { background: #f5f7fb; }
+            /* 主窗口 - 统一背景色 */
+            QMainWindow { 
+                background: #ffffff; 
+            }
+            
+            /* 工具栏 */
             QToolBar { 
-                background: rgba(255,255,255,0.9); 
+                background: #ffffff; 
                 border: none; 
-                padding: 6px; 
-                spacing: 8px; 
+                border-bottom: 1px solid #e2e8f0;
+                padding: 8px 12px; 
+                spacing: 4px; 
             }
             QToolBar QToolButton { 
-                padding: 6px 10px; 
-                border-radius: 6px; 
+                padding: 8px; 
+                border-radius: 6px;
+                min-width: 36px;
+                min-height: 36px;
             }
             QToolBar QToolButton:hover { 
-                background: rgba(0,0,0,0.06); 
+                background: #f1f5f9; 
+            }
+            QToolBar QToolButton:checked {
+                background: #dbeafe;
+                border: 2px solid #2563eb;
+            }
+            
+            /* 停靠窗口 */
+            QDockWidget {
+                titlebar-close-icon: none;
+                titlebar-normal-icon: none;
             }
             QDockWidget::title { 
-                padding: 6px 10px; 
-                background: rgba(0,0,0,0.04); 
-                border-bottom: 1px solid rgba(0,0,0,0.06); 
+                padding: 8px 12px; 
+                background: #f8fafc; 
+                border-bottom: 1px solid #e2e8f0;
+                font-size: 14px;
+                font-weight: 600;
+                color: #0f172a;
             }
+            
+            /* 按钮 */
             QPushButton { 
+                background: #2563eb;
+                color: #ffffff;
+                border: none;
                 border-radius: 6px; 
-                padding: 6px 12px; 
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: 500;
+                min-height: 32px;
+            }
+            QPushButton:hover {
+                background: #1d4ed8;
+            }
+            QPushButton:pressed {
+                background: #1e40af;
+            }
+            QPushButton:disabled {
+                background: #e2e8f0;
+                color: #cbd5e1;
+            }
+            
+            /* 菜单栏 */
+            QMenuBar {
+                background: #ffffff;
+                border-bottom: 1px solid #e2e8f0;
+                padding: 4px 8px;
+            }
+            QMenuBar::item {
+                background: transparent;
+                padding: 6px 12px;
+                border-radius: 4px;
+            }
+            QMenuBar::item:selected {
+                background: #f1f5f9;
+            }
+            
+            /* 菜单 */
+            QMenu {
+                background: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 8px 32px 8px 12px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background: #f1f5f9;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #e2e8f0;
+                margin: 4px 8px;
+            }
+            
+            /* 状态栏 */
+            QStatusBar {
+                background: #f8fafc;
+                border-top: 1px solid #e2e8f0;
+                padding: 0 12px;
+                font-size: 12px;
+                color: #64748b;
+            }
+            
+            /* 焦点指示器 - 可访问性 */
+            *:focus {
+                outline: 2px solid #2563eb;
+                outline-offset: 2px;
+            }
+            QToolButton:focus {
+                outline: 2px solid #2563eb;
+                outline-offset: 1px;
             }
             """
         )
@@ -259,7 +369,7 @@ class MainWindow(QMainWindow):
         """连接所有信号"""
         # 文档控制器信号
         self.doc_controller.status_message.connect(
-            lambda msg: self.statusBar().showMessage(msg)
+            lambda msg: self.statusBar().showMessage(msg, 3000)
         )
         
         # 选择管理器信号
@@ -271,11 +381,14 @@ class MainWindow(QMainWindow):
         self.view.shapeCommitted.connect(self._on_shape_committed)
         self.view.moveCommitted.connect(self._on_move_committed)
         self.view.deleteRequested.connect(self._on_delete_requested)
+        self.view.mouseMoved.connect(self._update_mouse_position)
+        self.view.zoomChanged.connect(self._update_zoom_level)
         
         # 工具管理器信号
-        self.tool_manager.tool_changed.connect(
-            lambda name, tool: self.statusBar().showMessage(f"当前工具：{name}")
-        )
+        self.tool_manager.tool_changed.connect(self._on_tool_changed_status)
+        
+        # 场景变化信号（更新对象数量）
+        self.scene.changed.connect(self._update_objects_count)
         
         # 属性面板信号（使用 PropertyController）
         self.property_panel.centerChanged.connect(
@@ -298,6 +411,40 @@ class MainWindow(QMainWindow):
         )
         
         logger.debug("信号连接完成")
+    
+    # ==================== 状态栏更新 ====================
+    
+    def _on_tool_changed_status(self, name: str, tool) -> None:
+        """工具变化时更新状态栏"""
+        tool_names = {
+            "select": "选择",
+            "point": "点",
+            "line": "直线",
+            "rect": "矩形",
+            "circle": "圆",
+            "polygon": "多边形",
+            "brush_pen": "普通画笔",
+            "brush_marker": "马克笔",
+            "brush_calligraphy": "书法笔",
+            "eraser": "橡皮擦"
+        }
+        display_name = tool_names.get(name, name)
+        self._status_tool_label.setText(f"工具: {display_name}")
+    
+    def _update_objects_count(self) -> None:
+        """更新对象数量"""
+        count = len([item for item in self.scene.items() if hasattr(item, 'shape_type')])
+        self._status_objects_label.setText(f"对象: {count}")
+    
+    def _update_mouse_position(self, scene_pos: QPointF) -> None:
+        """更新鼠标位置"""
+        self._status_pos_label.setText(f"位置: {int(scene_pos.x())}, {int(scene_pos.y())}")
+    
+    def _update_zoom_level(self) -> None:
+        """更新缩放比例"""
+        transform = self.view.transform()
+        zoom = transform.m11() * 100
+        self._status_zoom_label.setText(f"缩放: {int(zoom)}%")
     
     # ==================== 事件处理 ====================
     
@@ -354,6 +501,20 @@ class MainWindow(QMainWindow):
         for item in list(self.selection_mgr.get_selected_items()):
             cmd = DeleteShapeCommand(self.scene, item)
             self.undo_stack.push(cmd)
+    
+    # ==================== 对话框 ====================
+    
+    def _show_about_dialog(self) -> None:
+        """显示关于对话框"""
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.about(
+            self,
+            "关于",
+            "<h3>二维图形绘图系统</h3>"
+            "<p>版本 1.0</p>"
+            "<p>一个简洁、现代化的绘图应用</p>"
+            "<p>支持多种绘图工具和图形编辑功能</p>"
+        )
     
     # ==================== 窗口事件 ====================
     

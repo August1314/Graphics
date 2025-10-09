@@ -24,6 +24,8 @@ class CanvasView(QGraphicsView):
     deleteRequested = Signal(object)
     copyCompleted = Signal(bool)
     pasteCompleted = Signal(bool)
+    mouseMoved = Signal(QPointF)  # 鼠标移动信号，传递场景坐标
+    zoomChanged = Signal()  # 缩放变化信号
     def __init__(self, scene: QGraphicsScene, parent=None) -> None:
         super().__init__(scene, parent)
         self.setRenderHints(QPainter.Antialiasing | QPainter.TextAntialiasing)
@@ -72,6 +74,8 @@ class CanvasView(QGraphicsView):
         delta = event.angleDelta().y()
         factor = 1.0015 ** delta
         self.scale(factor, factor)
+        # 发送缩放变化信号
+        self.zoomChanged.emit()
 
     def mousePressEvent(self, event):  # type: ignore[override]
         if event.button() == Qt.MiddleButton or (event.button() == Qt.LeftButton and self._space_held):
@@ -141,6 +145,10 @@ class CanvasView(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):  # type: ignore[override]
+        # 发送鼠标位置信号（用于状态栏显示）
+        scene_pos = self.mapToScene(event.pos())
+        self.mouseMoved.emit(scene_pos)
+        
         if self._panning and self._pan_start is not None:
             delta = event.pos() - self._pan_start
             self._pan_start = event.pos()

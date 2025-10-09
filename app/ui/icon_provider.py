@@ -13,12 +13,14 @@ except Exception:
 class IconProvider:
     def __init__(self, theme: str = "light") -> None:
         self._theme = theme
+        self._default_size = 20  # 统一图标尺寸
         # 浅色主题：深色图标；深色主题：浅色图标
         if theme == "dark":
             self._fg = QColor(240, 240, 240)
         else:
-            self._fg = QColor(30, 30, 30)
+            self._fg = QColor("#0f172a")  # 使用设计系统的TEXT_PRIMARY颜色
         self._bg = Qt.GlobalColor.transparent
+        self._icon_cache = {}  # 图标缓存
         self._base_dir = Path(__file__).resolve().parent.parent / "resources" / "icons"
         self._name_map = {
             "select": "select.svg",
@@ -40,7 +42,16 @@ class IconProvider:
     def set_theme(self, theme: str) -> None:
         self.__init__(theme)
 
-    def get(self, name: str, size: int = 24) -> QIcon:
+    def get(self, name: str, size: int = 0) -> QIcon:
+        # 使用默认尺寸（20px）如果未指定
+        if size == 0:
+            size = self._default_size
+        
+        # 检查缓存
+        cache_key = f"{name}_{size}"
+        if cache_key in self._icon_cache:
+            return self._icon_cache[cache_key]
+        
         # 1) 尝试本地 SVG 资源
         # 允许为不同 brush 变体提供独立图标，不再强制折叠为 brush
         fname = self._name_map.get(name)
@@ -50,9 +61,12 @@ class IconProvider:
             if svg_path.exists():
                 ic = self._load_svg_icon(svg_path, size)
                 if not ic.isNull():
+                    self._icon_cache[cache_key] = ic
                     return ic
         # 2) 兜底：绘制型图标
-        return self._draw_fallback(name, size)
+        icon = self._draw_fallback(name, size)
+        self._icon_cache[cache_key] = icon
+        return icon
 
     # ---- helpers ----
     def _load_svg_icon(self, svg_path: Path, size: int) -> QIcon:

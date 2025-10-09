@@ -62,9 +62,14 @@ class BrushTool(BaseTool):
         self._update_brush_properties()
         
     def set_brush_type(self, brush_type: str) -> None:
-        """设置画笔类型"""
+        """设置画笔类型
+        
+        注意：不在这里调用 _update_brush_properties()，
+        因为可能会覆盖用户设置的画笔属性。
+        _update_brush_properties() 会在 on_press() 时调用。
+        """
         self._brush_type = brush_type
-        self._update_brush_properties()
+        # 不调用 _update_brush_properties()，避免覆盖用户设置
     
     def set_pen(self, pen: QPen) -> None:
         """设置画笔笔触"""
@@ -187,7 +192,14 @@ class BrushTool(BaseTool):
         return self._active
     
     def _update_brush_properties(self) -> None:
-        """根据画笔类型更新属性"""
+        """根据画笔类型更新属性
+        
+        注意：如果 _user_pen_override 为 True，则保留当前画笔的宽度和颜色
+        """
+        # 保存用户设置的宽度和颜色
+        user_width = self._pen.widthF() if self._user_pen_override else None
+        user_color = self._pen.color() if self._user_pen_override else None
+        
         if self._brush_type == self.BrushType.PEN:
             if not self._user_pen_override:
                 self._pen.setWidthF(8.0)
@@ -210,9 +222,16 @@ class BrushTool(BaseTool):
             self._pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         elif self._brush_type == self.BrushType.ERASER:
             self._pen.setColor(QColor("#FFFFFF"))
-            self._pen.setWidthF(8.0)
+            if not self._user_pen_override:
+                self._pen.setWidthF(8.0)
             self._pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             self._pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        
+        # 恢复用户设置的宽度和颜色
+        if user_width is not None:
+            self._pen.setWidthF(user_width)
+        if user_color is not None and self._brush_type != self.BrushType.ERASER:
+            self._pen.setColor(user_color)
     
     def _apply_brush_style(self) -> None:
         """应用画笔样式到当前图元"""
@@ -382,9 +401,11 @@ class BrushTool(BaseTool):
             radius = max(1.0, self._pen.widthF() / 2.0)
             dist = math.hypot(point.x() - last.x(), point.y() - last.y())
             
-            # 限制最大步数，避免极快移动导致过多循环
-            # 优化：减少步数，从 64 降到 32
-            steps = max(1, min(32, int(dist / max(1.0, radius * 0.5))))
+            # 优化插值步数计算，确保喷涂连续
+            # 步数应该足够多，使得每步之间的距离 < radius
+            # 这样喷涂的圆会重叠，形成连续的线
+            step_distance = radius * 0.3  # 每步距离为半径的 30%，确保重叠
+            steps = max(1, min(64, int(dist / step_distance)))
             
             for i in range(1, steps + 1):
                 t = i / steps

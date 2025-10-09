@@ -32,8 +32,9 @@ class ToolBar(QToolBar):
         self.action_select.setCheckable(True)
         self.action_select.setData("select")
         self.action_select.setIconVisibleInMenu(True)
-        self.action_select.setToolTip("选择工具 (V)")  # 用户体验优化：添加工具提示
+        self.action_select.setToolTip("选择工具 (V)")
         self.action_select.setStatusTip("选择和移动图形")
+        self.action_select.setWhatsThis("使用选择工具可以选中和移动画布上的图形对象")
         self._group.addAction(self.action_select)
         self.addAction(self.action_select)
 
@@ -44,6 +45,7 @@ class ToolBar(QToolBar):
         self.action_point.setIconVisibleInMenu(True)
         self.action_point.setToolTip("点工具 (P)")
         self.action_point.setStatusTip("绘制点")
+        self.action_point.setWhatsThis("使用点工具在画布上绘制点")
         self._group.addAction(self.action_point)
         
         self.action_line = QAction(self._icons.get("line"), "直线", self)
