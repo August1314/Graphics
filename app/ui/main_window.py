@@ -452,6 +452,20 @@ class MainWindow(QMainWindow):
         """工具变化处理"""
         self.tool_manager.set_tool(tool_name)
         self.view.set_tool(tool_name)
+        # 更新状态栏工具名称
+        tool_names = {
+            'select': '选择',
+            'point': '点',
+            'line': '直线',
+            'rect': '矩形',
+            'circle': '圆',
+            'polygon': '多边形',
+            'brush_pen': '普通画笔',
+            'brush_marker': '马克笔',
+            'brush_calligraphy': '书法笔',
+            'eraser': '橡皮擦'
+        }
+        self._status_tool_label.setText(f"工具: {tool_names.get(tool_name, tool_name)}")
     
     def _on_selection_changed(self, selected_items: list) -> None:
         """选择变化处理"""
@@ -501,6 +515,15 @@ class MainWindow(QMainWindow):
         for item in list(self.selection_mgr.get_selected_items()):
             cmd = DeleteShapeCommand(self.scene, item)
             self.undo_stack.push(cmd)
+    
+    def _update_object_count(self) -> None:
+        """更新对象数量显示"""
+        count = len([item for item in self.scene.items() if hasattr(item, 'item_type')])
+        self._status_objects_label.setText(f"对象: {count}")
+    
+    def _update_mouse_position(self, x: float, y: float) -> None:
+        """更新鼠标坐标显示"""
+        self._status_pos_label.setText(f"坐标: ({int(x)}, {int(y)})")
     
     # ==================== 对话框 ====================
     

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>绘图系统测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            flex-wrap: wrap;
+        }
+        
+        .tool-btn {
+            padding: 8px 16px;
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .tool-btn:hover {
+            border-color: #667eea;
+            background: #f0f0ff;
+        }
+        
+        .tool-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .canvas-wrapper {
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        
+        canvas {
+            border: 2px solid #dee2e6;
+            border-radius: 4px;
+            cursor: crosshair;
+            background: white;
+        }
+        
+        .controls {
+            padding: 15px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .control-group label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        input[type="color"] {
+            width: 50px;
+            height: 35px;
+            border: 2px solid #dee2e6;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        input[type="range"] {
+            width: 150px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+        
+        .status {
+            padding: 10px 15px;
+            background: #e7f3ff;
+            border-top: 1px solid #bee5eb;
+            font-size: 13px;
+            color: #004085;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 绘图系统测试</h1>
+            <p>测试所有绘图工具和功能</p>
+        </div>
+        
+        <div class="toolbar">
+            <button class="tool-btn active" data-tool="select">👆 选择</button>
+            <button class="tool-btn" data-tool="point">⚫ 点</button>
+            <button class="tool-btn" data-tool="line">📏 线</button>
+            <button class="tool-btn" data-tool="rect">▭ 矩形</button>
+            <button class="tool-btn" data-tool="circle">⭕ 圆形</button>
+            <button class="tool-btn" data-tool="polygon">⬡ 多边形</button>
+            <button class="tool-btn" data-tool="brush">🖌️ 画笔</button>
+            <button class="tool-btn" data-tool="eraser">🧹 橡皮擦</button>
+        </div>
+        
+        <div class="canvas-wrapper">
+            <canvas id="test-canvas" width="800" height="500"></canvas>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>描边颜色:</label>
+                <input type="color" id="stroke-color" value="#000000">
+            </div>
+            <div class="control-group">
+                <label>填充颜色:</label>
+                <input type="color" id="fill-color" value="#ffffff">
+                <label style="margin-left: 10px;">
+                    <input type="checkbox" id="fill-transparent" checked> 透明
+                </label>
+            </div>
+            <div class="control-group">
+                <label>线宽: <span id="width-value">2</span></label>
+                <input type="range" id="stroke-width" min="1" max="20" value="2">
+            </div>
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="grid-toggle"> 显示网格
+                </label>
+            </div>
+            <div class="control-group">
+                <button class="btn" id="btn-undo">↩️ 撤销</button>
+                <button class="btn" id="btn-redo">↪️ 重做</button>
+                <button class="btn" id="btn-clear">🗑️ 清空</button>
+                <button class="btn" id="btn-export">💾 导出PNG</button>
+            </div>
+        </div>
+        
+        <div class="status" id="status">
+            就绪 - 选择一个工具开始绘图
+        </div>
+    </div>
+
+    <script type="module">
+        import { CanvasManager } from './scripts/core/canvas.js';
+        import { Document } from './scripts/core/document.js';
+        import { SelectTool } from './scripts/tools/select.js';
+        import { PointTool } from './scripts/tools/point.js';
+        import { LineTool } from './scripts/tools/line.js';
+        import { RectTool } from './scripts/tools/rect.js';
+        import { CircleTool } from './scripts/tools/circle.js';
+        import { PolygonTool } from './scripts/tools/polygon.js';
+        import { BrushTool } from './scripts/tools/brush.js';
+        import { EraserTool } from './scripts/tools/eraser.js';
+
+        // 初始化
+        const canvas = document.getElementById('test-canvas');
+        const canvasManager = new CanvasManager(canvas);
+        const doc = new Document(canvasManager);
+        const status = document.getElementById('status');
+
+        // 当前样式
+        let currentStyle = {
+            strokeColor: '#000000',
+            fillColor: 'transparent', // 透明填充
+            strokeWidth: 2,
+            opacity: 1.0
+        };
+
+        // 注册工具
+        const tools = new Map();
+        
+        const selectTool = new SelectTool();
+        selectTool.setDocument(doc);
+        selectTool.on('shapeMoving', () => {
+            // 拖动时实时渲染
+            canvasManager.requestRender();
+        });
+        
+        selectTool.on('shapeMoved', () => {
+            doc.saveState();
+        });
+        selectTool.on('shapeSelected', (data) => {
+            // 更新样式控件以显示选中图形的属性
+            const props = data.properties;
+            console.log('选中图形，属性:', props);
+            
+            if (props.strokeColor) {
+                document.getElementById('stroke-color').value = props.strokeColor;
+                currentStyle.strokeColor = props.strokeColor;
+            }
+            
+            // 填充颜色：更新颜色选择器和透明复选框
+            if (props.fillColor) {
+                const transparentCheckbox = document.getElementById('fill-transparent');
+                if (props.fillColor === 'transparent') {
+                    transparentCheckbox.checked = true;
+                    document.getElementById('fill-color').value = '#ffffff';
+                } else {
+                    transparentCheckbox.checked = false;
+                    document.getElementById('fill-color').value = props.fillColor;
+                }
+                currentStyle.fillColor = props.fillColor;
+            }
+            
+            if (props.strokeWidth !== undefined) {
+                document.getElementById('stroke-width').value = props.strokeWidth;
+                document.getElementById('width-value').textContent = props.strokeWidth;
+                currentStyle.strokeWidth = props.strokeWidth;
+            }
+            
+            updateStatus(`已选中图形 (${data.shape.type})，可以修改属性`);
+        });
+        tools.set('select', selectTool);
+
+        const pointTool = new PointTool();
+        pointTool.setStyle(currentStyle);
+        pointTool.on('shapeCreated', (data) => {
+            doc.addShape(data.shape);
+            updateStatus('创建了一个点');
+        });
+        tools.set('point', pointTool);
+
+        const lineTool = new LineTool();
+        lineTool.setStyle(currentStyle);
+        lineTool.on('shapeCreated', (data) => {
+            doc.addShape(data.shape);
+            updateStatus('创建了一条线');
+        });
+        tools.set('line', lineTool);
+
+        const rectTool = new RectTool();
+        rectTool.setStyle(currentStyle);
+        rectTool.on('shapeCreated', (data) => {
+            doc.addShape(data.shape);
+            updateStatus('创建了一个矩形');
+        });
+        tools.set('rect', rectTool);
+
+        const circleTool = new CircleTool();
+        circleTool.setStyle(currentStyle);
+        circleTool.on('shapeCreated', (data) => {
+            doc.addShape(data.shape);
+            updateStatus('创建了一个圆形');
+        });
+        tools.set('circle', circleTool);
+
+        const polygonTool = new PolygonTool();
+        polygonTool.setStyle(currentStyle);
+        polygonTool.on('shapeCreated', (data) => {
+            doc.addShape(data.shape);
+            updateStatus('创建了一个多边形');
+        });
+        tools.set('polygon', polygonTool);
+
+        const brushTool = new BrushTool();
+        brushTool.setStyle(currentStyle);
+        brushTool.on('shapeCreated', (data) => {
+            doc.addShape(data.shape);
+            updateStatus('创建了一条路径');
+        });
+        tools.set('brush', brushTool);
+
+        const eraserTool = new EraserTool();
+        eraserTool.setDocument(doc);
+        tools.set('eraser', eraserTool);
+
+        // 监听文档变化
+        doc.on('shapesChanged', (data) => {
+            canvasManager.setShapes(data.shapes);
+        });
+
+        // 设置默认工具为选择工具
+        let currentTool = tools.get('select');
+        canvasManager.setTool(currentTool);
+
+        // 工具按钮事件
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const toolName = btn.dataset.tool;
+                currentTool = tools.get(toolName);
+                if (currentTool) {
+                    // 如果切换到非选择工具，取消所有选择
+                    if (toolName !== 'select') {
+                        doc.deselectAll();
+                        canvasManager.requestRender();
+                    }
+                    
+                    canvasManager.setTool(currentTool);
+                    if (currentTool.setStyle) {
+                        currentTool.setStyle(currentStyle);
+                    }
+                    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    updateStatus(`切换到${btn.textContent.trim()}工具`);
+                }
+            });
+        });
+
+        // 样式控件事件
+        document.getElementById('stroke-color').addEventListener('change', (e) => {
+            currentStyle.strokeColor = e.target.value;
+            if (currentTool && currentTool.setStyle) {
+                currentTool.setStyle(currentStyle);
+            }
+            // 如果选择工具激活，更新所有选中图形的属性
+            if (currentTool === selectTool) {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    selectedShapes.forEach(shape => {
+                        shape.setStrokeColor(e.target.value);
+                    });
+                    canvasManager.requestRender();
+                    doc.saveState();
+                    updateStatus(`已更新 ${selectedShapes.length} 个图形的描边颜色`);
+                }
+            }
+        });
+
+        // 填充颜色选择器
+        document.getElementById('fill-color').addEventListener('change', (e) => {
+            const transparentCheckbox = document.getElementById('fill-transparent');
+            if (transparentCheckbox.checked) {
+                transparentCheckbox.checked = false; // 取消透明
+            }
+            currentStyle.fillColor = e.target.value;
+            if (currentTool && currentTool.setStyle) {
+                currentTool.setStyle(currentStyle);
+            }
+            // 如果选择工具激活，更新所有选中图形的属性
+            if (currentTool === selectTool) {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    selectedShapes.forEach(shape => {
+                        shape.setFillColor(e.target.value);
+                    });
+                    canvasManager.requestRender();
+                    doc.saveState();
+                    updateStatus(`已更新 ${selectedShapes.length} 个图形的填充颜色`);
+                }
+            }
+        });
+
+        // 透明填充复选框
+        document.getElementById('fill-transparent').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                currentStyle.fillColor = 'transparent';
+            } else {
+                currentStyle.fillColor = document.getElementById('fill-color').value;
+            }
+            
+            if (currentTool && currentTool.setStyle) {
+                currentTool.setStyle(currentStyle);
+            }
+            
+            // 如果选择工具激活，更新所有选中图形的属性
+            if (currentTool === selectTool) {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    selectedShapes.forEach(shape => {
+                        shape.setFillColor(currentStyle.fillColor);
+                    });
+                    canvasManager.requestRender();
+                    doc.saveState();
+                    updateStatus(`已更新 ${selectedShapes.length} 个图形的填充`);
+                }
+            }
+        });
+
+        // 线宽调整 - 使用 input 事件实时预览，change 事件保存历史
+        let strokeWidthChanging = false;
+        let originalStrokeWidths = new Map(); // 保存原始线宽
+        
+        document.getElementById('stroke-width').addEventListener('input', (e) => {
+            const newWidth = parseInt(e.target.value);
+            currentStyle.strokeWidth = newWidth;
+            document.getElementById('width-value').textContent = e.target.value;
+            
+            if (currentTool && currentTool.setStyle) {
+                currentTool.setStyle(currentStyle);
+            }
+            
+            // 如果选择工具激活，实时更新所有选中图形的线宽
+            if (currentTool === selectTool) {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    // 第一次改变时保存原始值
+                    if (!strokeWidthChanging) {
+                        strokeWidthChanging = true;
+                        originalStrokeWidths.clear();
+                        selectedShapes.forEach(shape => {
+                            originalStrokeWidths.set(shape.id, shape.properties.strokeWidth);
+                        });
+                    }
+                    
+                    // 实时更新
+                    selectedShapes.forEach(shape => {
+                        shape.setStrokeWidth(newWidth);
+                    });
+                    canvasManager.requestRender();
+                }
+            }
+        });
+        
+        // 松开鼠标时保存历史记录
+        document.getElementById('stroke-width').addEventListener('change', (e) => {
+            if (currentTool === selectTool && strokeWidthChanging) {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    doc.saveState();
+                    updateStatus(`已更新 ${selectedShapes.length} 个图形的线宽`);
+                }
+                strokeWidthChanging = false;
+                originalStrokeWidths.clear();
+            }
+        });
+
+        // 控制按钮事件
+        document.getElementById('btn-undo').addEventListener('click', () => {
+            doc.undo();
+            updateStatus('撤销操作');
+        });
+
+        document.getElementById('btn-redo').addEventListener('click', () => {
+            doc.redo();
+            updateStatus('重做操作');
+        });
+
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            if (confirm('确定要清空所有图形吗？')) {
+                doc.clearShapes();
+                updateStatus('清空画布');
+            }
+        });
+
+        document.getElementById('btn-export').addEventListener('click', () => {
+            const dataURL = doc.exportPNG();
+            const link = document.createElement('a');
+            link.download = `drawing_${Date.now()}.png`;
+            link.href = dataURL;
+            link.click();
+            updateStatus('导出PNG成功');
+        });
+
+        // 网格切换
+        document.getElementById('grid-toggle').addEventListener('change', (e) => {
+            const showGrid = canvasManager.toggleGrid();
+            updateStatus(showGrid ? '网格已开启' : '网格已关闭');
+        });
+
+        function updateStatus(message) {
+            status.textContent = message;
+            setTimeout(() => {
+                status.textContent = '就绪 - 选择一个工具开始绘图';
+            }, 3000);
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            // 检测 Mac 的 Cmd 键或 Windows/Linux 的 Ctrl 键
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            const modifierKey = isMac ? e.metaKey : e.ctrlKey;
+            
+            // Ctrl/Cmd + Z: 撤销
+            if (modifierKey && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                doc.undo();
+                updateStatus('撤销');
+                return;
+            }
+            
+            // Ctrl/Cmd + Shift + Z 或 Ctrl/Cmd + Y: 重做
+            if ((modifierKey && e.key === 'z' && e.shiftKey) || (modifierKey && e.key === 'y')) {
+                e.preventDefault();
+                doc.redo();
+                updateStatus('重做');
+                return;
+            }
+            
+            // Ctrl/Cmd + E: 导出 PNG
+            if (modifierKey && e.key === 'e') {
+                e.preventDefault();
+                const dataURL = doc.exportPNG();
+                const link = document.createElement('a');
+                link.download = `drawing_${Date.now()}.png`;
+                link.href = dataURL;
+                link.click();
+                updateStatus('导出PNG');
+                return;
+            }
+            
+            // Delete 或 Backspace: 删除选中的图形
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    e.preventDefault();
+                    selectedShapes.forEach(shape => doc.removeShape(shape));
+                    doc.saveState();
+                    updateStatus(`删除了 ${selectedShapes.length} 个图形`);
+                }
+                return;
+            }
+            
+            // Esc: 取消当前操作
+            if (e.key === 'Escape') {
+                if (currentTool && typeof currentTool.cancel === 'function') {
+                    currentTool.cancel();
+                }
+                doc.deselectAll();
+                canvasManager.requestRender();
+                updateStatus('取消操作');
+                return;
+            }
+            
+            // 数字键 1-8: 快速切换工具
+            const toolKeys = {
+                '1': 'select',
+                '2': 'point',
+                '3': 'line',
+                '4': 'rect',
+                '5': 'circle',
+                '6': 'polygon',
+                '7': 'brush',
+                '8': 'eraser'
+            };
+            
+            if (toolKeys[e.key] && !modifierKey) {
+                e.preventDefault();
+                const toolName = toolKeys[e.key];
+                currentTool = tools.get(toolName);
+                if (currentTool) {
+                    // 如果切换到非选择工具，取消所有选择
+                    if (toolName !== 'select') {
+                        doc.deselectAll();
+                        canvasManager.requestRender();
+                    }
+                    
+                    canvasManager.setTool(currentTool);
+                    if (currentTool.setStyle) {
+                        currentTool.setStyle(currentStyle);
+                    }
+                    document.querySelectorAll('.tool-btn').forEach(btn => {
+                        if (btn.dataset.tool === toolName) {
+                            btn.classList.add('active');
+                        } else {
+                            btn.classList.remove('active');
+                        }
+                    });
+                    updateStatus(`切换到工具: ${e.key}`);
+                }
+                return;
+            }
+            
+            // Ctrl/Cmd + 0: 重置缩放
+            if (modifierKey && e.key === '0') {
+                e.preventDefault();
+                canvasManager.resetView();
+                updateStatus('重置缩放');
+                return;
+            }
+            
+            // Ctrl/Cmd + =: 放大
+            if (modifierKey && (e.key === '=' || e.key === '+')) {
+                e.preventDefault();
+                canvasManager.zoomIn();
+                updateStatus('放大');
+                return;
+            }
+            
+            // Ctrl/Cmd + -: 缩小
+            if (modifierKey && e.key === '-') {
+                e.preventDefault();
+                canvasManager.zoomOut();
+                updateStatus('缩小');
+                return;
+            }
+        });
+
+        console.log('测试页面初始化完成');
+        console.log('已注册工具:', Array.from(tools.keys()));
+    </script>
+</body>
+</html>
