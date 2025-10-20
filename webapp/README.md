@@ -57,39 +57,12 @@
 - 性能优化（requestAnimationFrame、防抖节流）
 
 ## 快速开始
-
-### 方式 1：直接打开（推荐）
-
-**简洁绘图工具（推荐新手）：**
 ```bash
-# 直接在浏览器中打开
-open draw.html
-```
-
-**完整应用界面：**
-```bash
-# 直接在浏览器中打开
-open index.html
-```
-
-**功能测试页面：**
-```bash
-# 直接在浏览器中打开
-open test.html
-```
-
-### 方式 2：使用本地服务器
-```bash
-# 使用 Python
+# 启动 Python HTTP 服务器
 python -m http.server 8000
-
-# 或使用 Node.js
-npx http-server
 
 # 然后在浏览器中访问
 # http://localhost:8000/draw.html    （简洁版）
-# http://localhost:8000/index.html   （完整版）
-# http://localhost:8000/test.html    （测试版）
 ```
 
 ## 使用说明
