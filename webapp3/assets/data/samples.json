@@ -1,0 +1,46 @@
+{
+  "samples": [
+    {
+      "id": "sample_1",
+      "title": "几何图案",
+      "description": "基础几何图形组合",
+      "thumbnail": "assets/images/samples/sample1.png",
+      "created": "2025-01-10T10:00:00Z",
+      "shapeCount": 5,
+      "data": {
+        "version": "2.0",
+        "canvas": { "width": 800, "height": 600 },
+        "metadata": { "title": "几何图案" },
+        "shapes": [
+          {
+            "id": "shape_1",
+            "type": "rect",
+            "properties": {
+              "x": 100,
+              "y": 100,
+              "width": 200,
+              "height": 150,
+              "strokeColor": "#2563eb",
+              "fillColor": "#dbeafe",
+              "strokeWidth": 3,
+              "opacity": 1.0
+            }
+          },
+          {
+            "id": "shape_2",
+            "type": "circle",
+            "properties": {
+              "cx": 500,
+              "cy": 200,
+              "r": 80,
+              "strokeColor": "#dc2626",
+              "fillColor": "#fee2e2",
+              "strokeWidth": 3,
+              "opacity": 1.0
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

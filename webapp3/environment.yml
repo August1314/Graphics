@@ -1,0 +1,5 @@
+name: webapp2
+channels:
+  - defaults
+dependencies:
+  - python=3.10

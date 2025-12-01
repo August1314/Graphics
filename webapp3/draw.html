@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>绘图工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #fafafa;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 顶部工具栏 */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            flex-shrink: 0;
+        }
+        
+        .toolbar-section {
+            display: flex;
+            gap: 4px;
+            padding: 0 8px;
+            border-right: 1px solid #e0e0e0;
+        }
+        
+        .toolbar-section:last-child {
+            border-right: none;
+        }
+        
+        .tool-btn {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        
+        .tool-btn:hover {
+            background: #f5f5f5;
+            border-color: #999;
+        }
+        
+        .tool-btn.active {
+            background: #2196F3;
+            color: white;
+            border-color: #2196F3;
+        }
+        
+        /* 颜色选择器 */
+        .color-picker {
+            width: 36px;
+            height: 36px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            overflow: hidden;
+        }
+        
+        .color-picker input {
+            width: 100%;
+            height: 100%;
+            border: none;
+            cursor: pointer;
+        }
+        
+        /* 滑块控件 */
+        .slider-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .slider-control input[type="range"] {
+            width: 80px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #e0e0e0;
+            border-radius: 2px;
+            outline: none;
+        }
+        
+        .slider-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #2196F3;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .slider-control input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #2196F3;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .slider-label {
+            font-size: 12px;
+            color: #666;
+            min-width: 30px;
+        }
+        
+        /* 画布区域 */
+        .canvas-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: #fafafa;
+        }
+        
+        canvas {
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            cursor: crosshair;
+            background: white;
+        }
+        
+        /* 复选框样式 */
+        .checkbox-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #666;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .checkbox-control input[type="checkbox"] {
+            cursor: pointer;
+        }
+        
+        /* 算法选择器样式 */
+        .algorithm-selector {
+            padding: 6px 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background: white;
+            font-size: 12px;
+            color: #333;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.15s;
+        }
+        
+        .algorithm-selector:hover {
+            border-color: #999;
+        }
+        
+        .algorithm-selector:focus {
+            border-color: #2196F3;
+        }
+        
+        .algorithm-section {
+            display: none;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .algorithm-section.visible {
+            display: flex;
+        }
+        
+        .algorithm-label {
+            font-size: 12px;
+            color: #666;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <!-- 工具选择 -->
+        <div class="toolbar-section">
+            <button class="tool-btn active" data-tool="select" title="选择 (1)">👆</button>
+            <button class="tool-btn" data-tool="point" title="点 (2)">⚫</button>
+            <button class="tool-btn" data-tool="line" title="线 (3)">📏</button>
+            <button class="tool-btn" data-tool="rect" title="矩形 (4)">▭</button>
+            <button class="tool-btn" data-tool="circle" title="圆形 (5)">⭕</button>
+            <button class="tool-btn" data-tool="polygon" title="多边形 (6)">⬡</button>
+            <button class="tool-btn" data-tool="bezierCurve" title="Bézier 曲线 (B)">♾️</button>
+            <button class="tool-btn" data-tool="bsplineCurve" title="B 样条曲线 (S)">🌀</button>
+            <button class="tool-btn" data-tool="bezierSurface" title="Bézier 曲面 (M)">🧊</button>
+            <button class="tool-btn" data-tool="brush" title="画笔 (7)">🖌️</button>
+            <button class="tool-btn" data-tool="fill" title="填充 (8)">🪣</button>
+            <button class="tool-btn" data-tool="eraser" title="橡皮擦 (9)">🧹</button>
+        </div>
+        
+        <!-- 颜色控制 -->
+        <div class="toolbar-section">
+            <div class="color-picker" title="描边颜色">
+                <input type="color" id="stroke-color" value="#000000">
+            </div>
+            <div class="color-picker" title="填充颜色">
+                <input type="color" id="fill-color" value="#ffffff">
+            </div>
+            <label class="checkbox-control">
+                <input type="checkbox" id="fill-transparent" checked>
+                <span>透明</span>
+            </label>
+        </div>
+        
+        <!-- 算法选择 -->
+        <div class="toolbar-section">
+            <div class="algorithm-section" id="line-algorithm-section">
+                <span class="algorithm-label">算法:</span>
+                <select class="algorithm-selector" id="line-algorithm">
+                    <option value="bresenham">Bresenham</option>
+                    <option value="dda">DDA</option>
+                    <option value="midpoint">中点画线</option>
+                    <option value="canvas">Canvas API</option>
+                </select>
+            </div>
+            <div class="algorithm-section" id="circle-algorithm-section">
+                <span class="algorithm-label">算法:</span>
+                <select class="algorithm-selector" id="circle-algorithm">
+                    <option value="midpoint">中点画圆</option>
+                    <option value="canvas">Canvas API</option>
+                </select>
+            </div>
+            <div class="algorithm-section" id="fill-algorithm-section">
+                <span class="algorithm-label">算法:</span>
+                <select class="algorithm-selector" id="fill-algorithm">
+                    <option value="boundary">边界填充</option>
+                    <option value="canvas">Canvas API</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- 线宽控制 -->
+        <div class="toolbar-section">
+            <div class="slider-control">
+                <span class="slider-label" id="width-value">2px</span>
+                <input type="range" id="stroke-width" min="1" max="20" value="2" title="线宽">
+            </div>
+        </div>
+        
+        <!-- 操作按钮 -->
+        <div class="toolbar-section">
+            <button class="tool-btn" id="btn-undo" title="撤销 (Ctrl+Z)">↩️</button>
+            <button class="tool-btn" id="btn-redo" title="重做 (Ctrl+Y)">↪️</button>
+            <button class="tool-btn" id="btn-clear" title="清空">🗑️</button>
+        </div>
+
+        <!-- 变换操作 -->
+        <div class="toolbar-section" id="transform-section" style="display: none;">
+            <button class="tool-btn" id="btn-rotate-left" title="逆时针旋转 (10°)">⟲</button>
+            <button class="tool-btn" id="btn-rotate-right" title="顺时针旋转 (10°)">⟳</button>
+            <button class="tool-btn" id="btn-scale-down" title="缩小 0.9x">➖</button>
+            <button class="tool-btn" id="btn-scale-up" title="放大 1.1x">➕</button>
+        </div>
+        
+        <!-- 视图控制 -->
+        <div class="toolbar-section">
+            <label class="checkbox-control">
+                <input type="checkbox" id="grid-toggle">
+                <span>网格</span>
+            </label>
+            <label class="checkbox-control">
+                <input type="checkbox" id="debug-toggle">
+                <span>调试</span>
+            </label>
+            <label class="checkbox-control">
+                <input type="checkbox" id="raster-toggle" checked>
+                <span>光栅化</span>
+            </label>
+            <button class="tool-btn" id="btn-export" title="导出PNG (Ctrl+E)">💾</button>
+        </div>
+    </div>
+    
+    <div class="canvas-container">
+        <canvas id="draw-canvas" width="1200" height="700"></canvas>
+        <div id="debug-panel" style="display: none; position: absolute; bottom: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); font-size: 12px; min-width: 200px;">
+            <div style="font-weight: bold; margin-bottom: 8px; color: #333;">性能统计</div>
+            <div id="debug-content" style="color: #666; line-height: 1.6;"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { CanvasManager } from './scripts/core/canvas.js';
+        import { Document } from './scripts/core/document.js';
+        import { SelectTool } from './scripts/tools/select.js';
+        import { PointTool } from './scripts/tools/point.js';
+        import { LineTool } from './scripts/tools/line.js';
+        import { RectTool } from './scripts/tools/rect.js';
+        import { CircleTool } from './scripts/tools/circle.js';
+        import { PolygonTool } from './scripts/tools/polygon.js';
+        import { BrushTool } from './scripts/tools/brush.js';
+        import { EraserTool } from './scripts/tools/eraser.js';
+        import { FillTool } from './scripts/tools/fill.js';
+        import { BezierCurveTool } from './scripts/tools/bezier_curve.js';
+        import { BSplineCurveTool } from './scripts/tools/bspline_curve.js';
+        import { BezierSurfaceTool } from './scripts/tools/bezier_surface.js';
+
+        // 初始化
+        const canvas = document.getElementById('draw-canvas');
+        const canvasManager = new CanvasManager(canvas);
+        const doc = new Document(canvasManager);
+
+        // 当前样式
+        let currentStyle = {
+            strokeColor: '#000000',
+            fillColor: 'transparent',
+            strokeWidth: 2,
+            opacity: 1.0
+        };
+        
+        // 当前算法选择
+        let currentAlgorithms = {
+            line: 'bresenham',
+            circle: 'midpoint',
+            fill: 'boundary'
+        };
+        
+        // 加载算法偏好
+        try {
+            const saved = localStorage.getItem('algorithmPreferences');
+            if (saved) {
+                currentAlgorithms = { ...currentAlgorithms, ...JSON.parse(saved) };
+                document.getElementById('line-algorithm').value = currentAlgorithms.line;
+                document.getElementById('circle-algorithm').value = currentAlgorithms.circle;
+                if (currentAlgorithms.fill) {
+                    document.getElementById('fill-algorithm').value = currentAlgorithms.fill;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load algorithm preferences:', error);
+        }
+        
+        const transformSection = document.getElementById('transform-section');
+
+        // 显示/隐藏算法选择器/曲线控件
+        function updateAlgorithmSelector(toolName) {
+            document.getElementById('line-algorithm-section').classList.remove('visible');
+            document.getElementById('circle-algorithm-section').classList.remove('visible');
+            document.getElementById('fill-algorithm-section').classList.remove('visible');
+            
+            if (toolName === 'line') {
+                document.getElementById('line-algorithm-section').classList.add('visible');
+            } else if (toolName === 'circle') {
+                document.getElementById('circle-algorithm-section').classList.add('visible');
+            } else if (toolName === 'fill') {
+                document.getElementById('fill-algorithm-section').classList.add('visible');
+            }
+
+            const curveTools = ['bezierCurve', 'bsplineCurve', 'bezierSurface'];
+            transformSection.style.display = curveTools.includes(toolName) ? 'flex' : 'none';
+        }
+        
+        // 调试模式
+        window.DEBUG_MODE = false;
+        let lastStats = null;
+        
+        window.updateDebugPanel = function(stats) {
+            if (!window.DEBUG_MODE) return;
+            lastStats = stats;
+            const debugContent = document.getElementById('debug-content');
+            if (debugContent && stats) {
+                const time = stats.executionTime || 0;
+                let timeDisplay;
+                
+                // 根据时间大小选择合适的单位
+                if (time >= 1) {
+                    // >= 1ms，显示毫秒
+                    timeDisplay = `${time.toFixed(3)}ms`;
+                } else if (time >= 0.001) {
+                    // >= 1μs，显示微秒
+                    timeDisplay = `${(time * 1000).toFixed(2)}μs`;
+                } else {
+                    // < 1μs，显示纳秒
+                    timeDisplay = `${(time * 1000000).toFixed(0)}ns`;
+                }
+                
+                debugContent.innerHTML = `
+                    算法: ${stats.name || 'N/A'}<br>
+                    像素数: ${stats.pixelCount || 0}<br>
+                    执行时间: ${timeDisplay}<br>
+                    效率: ${stats.pixelCount && stats.executionTime ? 
+                        Math.round(stats.pixelCount / stats.executionTime * 1000) : 0} px/s
+                `;
+            }
+        };
+
+        // 注册工具
+        const tools = new Map();
+        
+        const selectTool = new SelectTool();
+        selectTool.setDocument(doc);
+        selectTool.on('shapeMoving', () => canvasManager.requestRender());
+        selectTool.on('shapeMoved', () => doc.saveState());
+        selectTool.on('shapeSelected', (data) => {
+            const props = data.properties;
+            if (props.strokeColor) {
+                document.getElementById('stroke-color').value = props.strokeColor;
+                currentStyle.strokeColor = props.strokeColor;
+            }
+            if (props.fillColor) {
+                const transparentCheckbox = document.getElementById('fill-transparent');
+                if (props.fillColor === 'transparent') {
+                    transparentCheckbox.checked = true;
+                    document.getElementById('fill-color').value = '#ffffff';
+                } else {
+                    transparentCheckbox.checked = false;
+                    document.getElementById('fill-color').value = props.fillColor;
+                }
+                currentStyle.fillColor = props.fillColor;
+            }
+            if (props.strokeWidth !== undefined) {
+                document.getElementById('stroke-width').value = props.strokeWidth;
+                document.getElementById('width-value').textContent = props.strokeWidth + 'px';
+                currentStyle.strokeWidth = props.strokeWidth;
+            }
+        });
+        tools.set('select', selectTool);
+
+        const pointTool = new PointTool();
+        pointTool.setStyle(currentStyle);
+        pointTool.on('shapeCreated', (data) => doc.addShape(data.shape));
+        tools.set('point', pointTool);
+
+        const lineTool = new LineTool();
+        lineTool.setStyle(currentStyle);
+        lineTool.on('shapeCreated', (data) => {
+            data.shape.algorithm = currentAlgorithms.line;
+            doc.addShape(data.shape);
+        });
+        tools.set('line', lineTool);
+
+        const rectTool = new RectTool();
+        rectTool.setStyle(currentStyle);
+        rectTool.on('shapeCreated', (data) => doc.addShape(data.shape));
+        tools.set('rect', rectTool);
+
+        const circleTool = new CircleTool();
+        circleTool.setStyle(currentStyle);
+        circleTool.on('shapeCreated', (data) => {
+            data.shape.algorithm = currentAlgorithms.circle;
+            doc.addShape(data.shape);
+        });
+        tools.set('circle', circleTool);
+
+        const polygonTool = new PolygonTool();
+        polygonTool.setStyle(currentStyle);
+        polygonTool.on('shapeCreated', (data) => doc.addShape(data.shape));
+        tools.set('polygon', polygonTool);
+
+        const brushTool = new BrushTool();
+        brushTool.setStyle(currentStyle);
+        brushTool.on('shapeCreated', (data) => doc.addShape(data.shape));
+        tools.set('brush', brushTool);
+
+        const eraserTool = new EraserTool();
+        eraserTool.setDocument(doc);
+        tools.set('eraser', eraserTool);
+
+        const fillTool = new FillTool();
+        fillTool.setStyle(currentStyle);
+        fillTool.on('fillRequested', (data) => {
+            // 提供 canvas 引用和文档引用给填充工具
+            if (data.callback) {
+                data.callback(canvasManager.canvas, doc);
+            }
+        });
+        fillTool.on('fillCompleted', (data) => {
+            if (data.targetShape) {
+                // 找到了目标图形，已修改其填充颜色
+                doc.saveState();
+                canvasManager.requestRender();
+                console.log('填充完成，已修改图形的填充颜色');
+            } else {
+                // 没有找到目标图形，填充是临时的
+                console.log('填充完成，像素已直接写入画布（临时）');
+                console.log('注意：切换工具或移动图形时填充会消失');
+            }
+        });
+        tools.set('fill', fillTool);
+
+        const bezierTool = new BezierCurveTool();
+        bezierTool.setDocument(doc);
+        bezierTool.setStyle(currentStyle);
+        bezierTool.on('shapeCreated', (data) => doc.addShape(data.shape));
+        tools.set('bezierCurve', bezierTool);
+
+        const bsplineTool = new BSplineCurveTool();
+        bsplineTool.setDocument(doc);
+        bsplineTool.setStyle(currentStyle);
+        bsplineTool.on('shapeCreated', (data) => doc.addShape(data.shape));
+        tools.set('bsplineCurve', bsplineTool);
+
+        const surfaceTool = new BezierSurfaceTool();
+        surfaceTool.setDocument(doc);
+        surfaceTool.setStyle(currentStyle);
+        surfaceTool.on('shapeCreated', (data) => doc.addShape(data.shape));
+        tools.set('bezierSurface', surfaceTool);
+
+        // 监听文档变化
+        doc.on('shapesChanged', (data) => canvasManager.setShapes(data.shapes));
+
+        // 设置默认工具
+        let currentTool = tools.get('select');
+        canvasManager.setTool(currentTool);
+
+        // 工具按钮事件
+        document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const toolName = btn.dataset.tool;
+                currentTool = tools.get(toolName);
+                if (currentTool) {
+                    if (toolName !== 'select') {
+                        doc.deselectAll();
+                        canvasManager.requestRender();
+                    }
+                    canvasManager.setTool(currentTool);
+                    if (currentTool.setStyle) {
+                        currentTool.setStyle(currentStyle);
+                    }
+                    document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    // 更新算法选择器显示
+                    updateAlgorithmSelector(toolName);
+                }
+            });
+        });
+        
+        // 算法选择器事件
+        document.getElementById('line-algorithm').addEventListener('change', (e) => {
+            currentAlgorithms.line = e.target.value;
+            try {
+                localStorage.setItem('algorithmPreferences', JSON.stringify(currentAlgorithms));
+            } catch (error) {
+                console.error('Failed to save algorithm preferences:', error);
+            }
+        });
+        
+        document.getElementById('circle-algorithm').addEventListener('change', (e) => {
+            currentAlgorithms.circle = e.target.value;
+            try {
+                localStorage.setItem('algorithmPreferences', JSON.stringify(currentAlgorithms));
+            } catch (error) {
+                console.error('Failed to save algorithm preferences:', error);
+            }
+        });
+
+        document.getElementById('fill-algorithm').addEventListener('change', (e) => {
+            currentAlgorithms.fill = e.target.value;
+            const fillToolInstance = tools.get('fill');
+            if (fillToolInstance) {
+                fillToolInstance.setAlgorithm(e.target.value);
+                fillToolInstance.setUseRasterization(e.target.value !== 'canvas');
+            }
+            try {
+                localStorage.setItem('algorithmPreferences', JSON.stringify(currentAlgorithms));
+            } catch (error) {
+                console.error('Failed to save algorithm preferences:', error);
+            }
+        });
+
+        // 样式控件
+        document.getElementById('stroke-color').addEventListener('change', (e) => {
+            currentStyle.strokeColor = e.target.value;
+            if (currentTool && currentTool.setStyle) {
+                currentTool.setStyle(currentStyle);
+            }
+            if (currentTool === selectTool) {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    selectedShapes.forEach(shape => shape.setStrokeColor(e.target.value));
+                    canvasManager.requestRender();
+                    doc.saveState();
+                }
+                updateAlgorithmSelector(toolName);
+            }
+        });
+
+        document.getElementById('fill-color').addEventListener('change', (e) => {
+            const transparentCheckbox = document.getElementById('fill-transparent');
+            if (transparentCheckbox.checked) {
+                transparentCheckbox.checked = false;
+            }
+            currentStyle.fillColor = e.target.value;
+            if (currentTool && currentTool.setStyle) {
+                currentTool.setStyle(currentStyle);
+            }
+            if (currentTool === selectTool) {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    selectedShapes.forEach(shape => shape.setFillColor(e.target.value));
+                    canvasManager.requestRender();
+                    doc.saveState();
+                }
+            }
+        });
+
+        document.getElementById('fill-transparent').addEventListener('change', (e) => {
+            currentStyle.fillColor = e.target.checked ? 'transparent' : document.getElementById('fill-color').value;
+            if (currentTool && currentTool.setStyle) {
+                currentTool.setStyle(currentStyle);
+            }
+            if (currentTool === selectTool) {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    selectedShapes.forEach(shape => shape.setFillColor(currentStyle.fillColor));
+                    canvasManager.requestRender();
+                    doc.saveState();
+                }
+            }
+        });
+
+        let strokeWidthChanging = false;
+        document.getElementById('stroke-width').addEventListener('input', (e) => {
+            const newWidth = parseInt(e.target.value);
+            currentStyle.strokeWidth = newWidth;
+            document.getElementById('width-value').textContent = newWidth + 'px';
+            if (currentTool && currentTool.setStyle) {
+                currentTool.setStyle(currentStyle);
+            }
+            if (currentTool === selectTool) {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    if (!strokeWidthChanging) {
+                        strokeWidthChanging = true;
+                    }
+                    selectedShapes.forEach(shape => shape.setStrokeWidth(newWidth));
+                    canvasManager.requestRender();
+                }
+            }
+        });
+
+        document.getElementById('stroke-width').addEventListener('change', () => {
+            if (currentTool === selectTool && strokeWidthChanging) {
+                doc.saveState();
+                strokeWidthChanging = false;
+            }
+        });
+
+        // 变换按钮辅助函数
+        function applyTransform(callback) {
+            const selected = doc.getSelectedShapes();
+            if (selected.length === 0) return;
+            let changed = false;
+            selected.forEach(shape => {
+                const result = callback(shape);
+                if (result !== false) {
+                    changed = true;
+                }
+            });
+            if (changed) {
+                canvasManager.requestRender();
+                doc.saveState();
+            }
+        }
+
+        document.getElementById('btn-rotate-left').addEventListener('click', () => {
+            const angle = -Math.PI / 18; // -10°
+            applyTransform(shape => {
+                if (typeof shape.rotate === 'function') {
+                    shape.rotate(angle);
+                } else {
+                    return false;
+                }
+            });
+        });
+
+        document.getElementById('btn-rotate-right').addEventListener('click', () => {
+            const angle = Math.PI / 18;
+            applyTransform(shape => {
+                if (typeof shape.rotate === 'function') {
+                    shape.rotate(angle);
+                } else {
+                    return false;
+                }
+            });
+        });
+
+        document.getElementById('btn-scale-down').addEventListener('click', () => {
+            const factor = 0.9;
+            applyTransform(shape => {
+                if (typeof shape.scale === 'function') {
+                    shape.scale(factor);
+                } else {
+                    return false;
+                }
+            });
+        });
+
+        document.getElementById('btn-scale-up').addEventListener('click', () => {
+            const factor = 1.1;
+            applyTransform(shape => {
+                if (typeof shape.scale === 'function') {
+                    shape.scale(factor);
+                } else {
+                    return false;
+                }
+            });
+        });
+
+        // 清除 localStorage 中的旧数据（临时调试）
+        // localStorage.clear();
+        // console.log('LocalStorage cleared');
+        
+        // 控制按钮
+        document.getElementById('btn-undo').addEventListener('click', () => doc.undo());
+        document.getElementById('btn-redo').addEventListener('click', () => doc.redo());
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            if (confirm('确定要清空所有图形吗？')) {
+                doc.clearShapes();
+            }
+        });
+        document.getElementById('btn-export').addEventListener('click', () => {
+            const dataURL = doc.exportPNG();
+            const link = document.createElement('a');
+            link.download = `drawing_${Date.now()}.png`;
+            link.href = dataURL;
+            link.click();
+        });
+
+        // 控制按钮事件
+        document.getElementById('grid-toggle').addEventListener('change', () => canvasManager.toggleGrid());
+        document.getElementById('debug-toggle').addEventListener('change', (e) => {
+            window.DEBUG_MODE = e.target.checked;
+            const debugPanel = document.getElementById('debug-panel');
+            if (debugPanel) {
+                debugPanel.style.display = window.DEBUG_MODE ? 'block' : 'none';
+                if (window.DEBUG_MODE && lastStats) {
+                    window.updateDebugPanel(lastStats);
+                }
+            }
+        });
+        
+        document.getElementById('raster-toggle').addEventListener('change', (e) => {
+            const useRasterization = e.target.checked;
+            // 更新所有现有图形
+            const shapes = doc.getShapes();
+            shapes.forEach(shape => {
+                if (shape.useRasterization !== undefined) {
+                    shape.useRasterization = useRasterization;
+                }
+            });
+            canvasManager.requestRender();
+        });
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            const modifierKey = isMac ? e.metaKey : e.ctrlKey;
+            
+            if (modifierKey && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                doc.undo();
+            } else if ((modifierKey && e.key === 'z' && e.shiftKey) || (modifierKey && e.key === 'y')) {
+                e.preventDefault();
+                doc.redo();
+            } else if (modifierKey && e.key === 'e') {
+                e.preventDefault();
+                const dataURL = doc.exportPNG();
+                const link = document.createElement('a');
+                link.download = `drawing_${Date.now()}.png`;
+                link.href = dataURL;
+                link.click();
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                const selectedShapes = doc.getSelectedShapes();
+                if (selectedShapes.length > 0) {
+                    e.preventDefault();
+                    selectedShapes.forEach(shape => doc.removeShape(shape));
+                    doc.saveState();
+                }
+            } else if (e.key === 'Escape') {
+                if (currentTool && typeof currentTool.cancel === 'function') {
+                    currentTool.cancel();
+                }
+                doc.deselectAll();
+                canvasManager.requestRender();
+            } else if (modifierKey && e.key === '0') {
+                e.preventDefault();
+                canvasManager.resetView();
+            } else if (modifierKey && (e.key === '=' || e.key === '+')) {
+                e.preventDefault();
+                canvasManager.zoomIn();
+            } else if (modifierKey && e.key === '-') {
+                e.preventDefault();
+                canvasManager.zoomOut();
+            } else if (!modifierKey && (e.key === 'r' || e.key === 'R')) {
+                // 旋转选中图形：r 顺时针，R 逆时针
+                const angle = (Math.PI / 18) * (e.key === 'r' ? 1 : -1); // 10 度
+                const selected = doc.getSelectedShapes();
+                if (selected.length > 0) {
+                    e.preventDefault();
+                    selected.forEach(shape => {
+                        if (typeof shape.rotate === 'function') {
+                            shape.rotate(angle);
+                        }
+                    });
+                    canvasManager.requestRender();
+                    doc.saveState();
+                }
+            } else if (!modifierKey && (e.key === '[' || e.key === ']')) {
+                // 缩放选中图形：[ 缩小，] 放大
+                const factor = e.key === '[' ? 0.9 : 1.1;
+                const selected = doc.getSelectedShapes();
+                if (selected.length > 0) {
+                    e.preventDefault();
+                    selected.forEach(shape => {
+                        if (typeof shape.scale === 'function') {
+                            shape.scale(factor);
+                        }
+                    });
+                    canvasManager.requestRender();
+                    doc.saveState();
+                }
+            }
+            
+            // 工具快捷键
+            const toolKeys = {
+                '1': 'select',
+                '2': 'point',
+                '3': 'line',
+                '4': 'rect',
+                '5': 'circle',
+                '6': 'polygon',
+                '7': 'brush',
+                '8': 'fill',
+                '9': 'eraser',
+                'b': 'bezierCurve',
+                'B': 'bezierCurve',
+                's': 'bsplineCurve',
+                'S': 'bsplineCurve',
+                'm': 'bezierSurface',
+                'M': 'bezierSurface'
+            };
+            
+            if (toolKeys[e.key] && !modifierKey) {
+                e.preventDefault();
+                const toolName = toolKeys[e.key];
+                currentTool = tools.get(toolName);
+                if (currentTool) {
+                    if (toolName !== 'select') {
+                        doc.deselectAll();
+                        canvasManager.requestRender();
+                    }
+                    canvasManager.setTool(currentTool);
+                    if (currentTool.setStyle) {
+                        currentTool.setStyle(currentStyle);
+                    }
+                    document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.tool === toolName);
+                    });
+                    updateAlgorithmSelector(toolName);
+                }
+            }
+        });
+
+        // 初始化工具栏状态
+        updateAlgorithmSelector('select');
+    </script>
+</body>
+</html>
