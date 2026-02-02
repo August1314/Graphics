@@ -27,17 +27,37 @@ export class BSplineCurveAlgorithm extends BaseAlgorithm {
             ? knots
             : this.generateUniformKnots(controlPoints.length, clampedDegree);
 
+        if (knotVector.length < clampedDegree + 1) return; // 无效的节点向量
+
         this.basisCache.clear();
         this.resetStats();
         const start = (typeof performance !== 'undefined' ? performance.now() : Date.now());
         const rgba = this.parseColor(color);
         const samplePoints = [];
+        const numSteps = Math.max(1, steps); // 防止除零错误
 
-        for (let i = 0; i <= steps; i++) {
-            const u = i / steps;
-            samplePoints.push(this.evaluate(controlPoints, clampedDegree, knotVector, u));
+        // 计算控制点的边界框，用于检测无效点
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const pt of controlPoints) {
+            minX = Math.min(minX, pt.x);
+            minY = Math.min(minY, pt.y);
+            maxX = Math.max(maxX, pt.x);
+            maxY = Math.max(maxY, pt.y);
+        }
+        const hasValidControlPoints = isFinite(minX) && controlPoints.length > 0;
+
+        for (let i = 0; i <= numSteps; i++) {
+            const u = i / numSteps;
+            const pt = this.evaluate(controlPoints, clampedDegree, knotVector, u);
+            // 过滤无效点：如果点是 (0,0) 且控制点不在原点，说明计算错误
+            const isInvalid = (pt.x === 0 && pt.y === 0) && hasValidControlPoints && 
+                             (minX !== 0 || minY !== 0 || maxX !== 0 || maxY !== 0);
+            if (!isInvalid) {
+                samplePoints.push(pt);
+            }
         }
 
+        // 只绘制有效的线段
         for (let i = 1; i < samplePoints.length; i++) {
             this.drawSegment(samplePoints[i - 1], samplePoints[i], lineWidth, rgba, renderer);
         }
@@ -49,7 +69,7 @@ export class BSplineCurveAlgorithm extends BaseAlgorithm {
     generateUniformKnots(pointCount, degree) {
         const knotCount = pointCount + degree + 1;
         const knots = [];
-        const segments = knotCount - 2 * degree;
+        const segments = Math.max(1, knotCount - 2 * degree); // 防止除零错误
         for (let i = 0; i < knotCount; i++) {
             if (i <= degree) {
                 knots.push(0);
@@ -63,6 +83,15 @@ export class BSplineCurveAlgorithm extends BaseAlgorithm {
     }
 
     evaluate(controlPoints, degree, knots, tNorm) {
+        if (controlPoints.length === 0) {
+            return { x: 0, y: 0 };
+        }
+        if (controlPoints.length === 1) {
+            return { x: controlPoints[0].x, y: controlPoints[0].y };
+        }
+        if (knots.length < degree + 1) {
+            return { x: 0, y: 0 };
+        }
         const domainStart = knots[degree];
         const domainEnd = knots[knots.length - degree - 1];
         const t = domainStart + tNorm * (domainEnd - domainStart);

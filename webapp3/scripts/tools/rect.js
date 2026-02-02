@@ -16,7 +16,9 @@ export class RectTool extends BaseTool {
             strokeColor: CONFIG.TOOLS.defaultStrokeColor,
             fillColor: CONFIG.TOOLS.defaultFillColor,
             strokeWidth: CONFIG.TOOLS.defaultStrokeWidth,
-            opacity: CONFIG.TOOLS.defaultOpacity
+            opacity: CONFIG.TOOLS.defaultOpacity,
+            // 关闭光栅化，避免与画布变换（缩放/平移/DPR）不一致导致填充偏移
+            useRasterization: false
         };
     }
 

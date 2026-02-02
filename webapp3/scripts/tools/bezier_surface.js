@@ -16,6 +16,7 @@ export class BezierSurfaceTool extends BaseTool {
         this.previewSurface = null;
         this.draggingControl = null; // { surface, i, j }
         this.hitTolerance = 10;
+        this.surfaceMode = 'grid';
         this.currentStyle = {
             strokeColor: CONFIG.TOOLS.defaultStrokeColor,
             fillColor: '#cccccc',
@@ -38,6 +39,28 @@ export class BezierSurfaceTool extends BaseTool {
         }
     }
 
+    setMode(mode) {
+        this.surfaceMode = mode;
+        // 填充模式下，确保当前样式有填充色
+        if (mode === 'fill' && this.currentStyle.fillColor === 'transparent') {
+            this.currentStyle.fillColor = '#cccccc';
+        }
+        if (this.previewSurface) {
+            this.previewSurface.mode = mode;
+            if (this.previewSurface.properties) {
+                this.previewSurface.properties.mode = mode;
+                if (mode === 'fill' && this.previewSurface.properties.fillColor === 'transparent') {
+                    this.previewSurface.properties.fillColor = this.currentStyle.fillColor || '#cccccc';
+                    this.previewSurface.properties.fillTransparent = false;
+                }
+            }
+            if (mode === 'fill' && this.previewSurface.properties.fillColor === 'transparent') {
+                this.previewSurface.properties.fillColor = this.currentStyle.fillColor || '#cccccc';
+            }
+            this.previewSurface.cacheValid = false;
+        }
+    }
+
     onMouseDown(x, y, event) {
         // 优先检查是否拖拽已有控制点
         if (!this.drawing && this.tryStartControlDrag(x, y)) {
@@ -52,7 +75,7 @@ export class BezierSurfaceTool extends BaseTool {
             ...this.currentStyle,
             stepsU: 10,
             stepsV: 10,
-            mode: 'grid',
+            mode: this.surfaceMode,
             showControlGrid: true
         });
         this.emit('previewStarted', { shape: this.previewSurface });
@@ -120,6 +143,7 @@ export class BezierSurfaceTool extends BaseTool {
             const shape = shapes[i];
             if (shape instanceof BezierSurface && shape.contains(x, y)) {
                 shape.mode = shape.mode === 'grid' ? 'fill' : 'grid';
+                this.surfaceMode = shape.mode;
                 shape.cacheValid = false;
                 this.document.markModified();
                 this.document.emit('shapesChanged', { shapes: this.document.getShapes() });

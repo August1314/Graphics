@@ -15,17 +15,37 @@ export class BSplineCurve extends CurveShapeBase {
     }
 
     render(ctx) {
-        try {
-            if (this.useRasterization) {
-                this.renderWithAlgorithm(ctx);
-            } else {
+        // 如果是预览模式，需要更多控制点才能显示真正的 B 样条曲线
+        // 当控制点数量 = degree + 1 时，B 样条退化为 Bézier 曲线，节点向量变成 [0,0,0,0,1,1,1,1]
+        // 这会导致曲线可能显示为直线（特别是当控制点共线时）
+        // 所以预览模式下，需要至少 degree + 2 个控制点才显示曲线
+        const minPointsForPreview = this.degree + 2;
+        const minPointsForCurve = this.degree + 1;
+        let shouldRenderCurve = true;
+        
+        if (this._isPreview) {
+            // 预览模式：需要更多控制点才显示曲线，避免显示为直线
+            shouldRenderCurve = this.controlPoints.length >= minPointsForPreview;
+        } else {
+            // 非预览模式：正常的 B 样条曲线
+            // 即使控制点数量 = degree + 1 时退化为 Bézier，也允许显示（这是正常的 B 样条行为）
+            shouldRenderCurve = this.controlPoints.length >= minPointsForCurve;
+        }
+        
+        if (shouldRenderCurve) {
+            try {
+                if (this.useRasterization) {
+                    this.renderWithAlgorithm(ctx);
+                } else {
+                    this.renderWithCanvas(ctx);
+                }
+            } catch (error) {
+                console.error('B-spline rasterization failed, fallback to canvas:', error);
                 this.renderWithCanvas(ctx);
             }
-        } catch (error) {
-            console.error('B-spline rasterization failed, fallback to canvas:', error);
-            this.renderWithCanvas(ctx);
         }
 
+        // 始终显示控制多边形（如果启用）
         if (this.selected || this.showControlPolygon) {
             this.renderControlPolygon(ctx);
         }
@@ -35,6 +55,15 @@ export class BSplineCurve extends CurveShapeBase {
 
     renderWithAlgorithm(ctx) {
         if (this.controlPoints.length < 2) return;
+        // 如果是预览模式，需要更多控制点才渲染曲线
+        const minPointsForPreview = this.degree + 2;
+        const minPointsForCurve = this.degree + 1;
+        if (this._isPreview && this.controlPoints.length < minPointsForPreview) {
+            return;
+        }
+        if (!this._isPreview && this.controlPoints.length < minPointsForCurve) {
+            return;
+        }
         const bounds = this.getBounds();
         const offsetX = bounds.x;
         const offsetY = bounds.y;
@@ -75,10 +104,20 @@ export class BSplineCurve extends CurveShapeBase {
 
     renderWithCanvas(ctx) {
         if (this.controlPoints.length < 2) return;
+        // 如果是预览模式，需要更多控制点才渲染曲线
+        const minPointsForPreview = this.degree + 2;
+        const minPointsForCurve = this.degree + 1;
+        if (this._isPreview && this.controlPoints.length < minPointsForPreview) {
+            return;
+        }
+        if (!this._isPreview && this.controlPoints.length < minPointsForCurve) {
+            return;
+        }
         ctx.save();
         this.applyStyle(ctx);
         ctx.beginPath();
         const samplePoints = this.getSamplePoints();
+        if (samplePoints.length === 0) return;
         ctx.moveTo(samplePoints[0].x, samplePoints[0].y);
         for (let i = 1; i < samplePoints.length; i++) {
             ctx.lineTo(samplePoints[i].x, samplePoints[i].y);
@@ -88,17 +127,36 @@ export class BSplineCurve extends CurveShapeBase {
     }
 
     getSamplePoints() {
+        if (this.controlPoints.length < 2) return [];
         const points = [];
-        for (let i = 0; i <= this.samples; i++) {
-            const t = i / this.samples;
-            points.push(this.evaluate(t));
+        const samples = Math.max(1, this.samples); // 防止除零错误
+        for (let i = 0; i <= samples; i++) {
+            const t = i / samples;
+            const pt = this.evaluate(t);
+            // 检查点是否有效（不是 (0,0) 或者与控制点重合）
+            // 如果 evaluate 返回 (0,0) 且控制点不在原点，说明计算错误，跳过该点
+            const isInvalid = (pt.x === 0 && pt.y === 0) && 
+                             this.controlPoints.length > 0 && 
+                             (this.controlPoints[0].x !== 0 || this.controlPoints[0].y !== 0);
+            if (!isInvalid) {
+                points.push(pt);
+            }
         }
         return points;
     }
 
     evaluate(tNorm) {
+        if (this.controlPoints.length === 0) {
+            return { x: 0, y: 0 };
+        }
+        if (this.controlPoints.length === 1) {
+            return { x: this.controlPoints[0].x, y: this.controlPoints[0].y };
+        }
         const degree = Math.max(1, Math.min(this.degree, this.controlPoints.length - 1));
         const knots = this.getEffectiveKnots();
+        if (knots.length < degree + 1) {
+            return { x: 0, y: 0 };
+        }
         const domainStart = knots[degree];
         const domainEnd = knots[knots.length - degree - 1];
         const t = domainStart + tNorm * (domainEnd - domainStart);
@@ -113,6 +171,45 @@ export class BSplineCurve extends CurveShapeBase {
         return point;
     }
 
+    getBounds() {
+        // 对于 B 样条曲线，需要基于实际曲线采样点计算边界框
+        // 因为曲线可能超出控制点的边界框
+        const samplePoints = this.getSamplePoints();
+        if (samplePoints.length === 0) {
+            // 如果没有采样点，回退到基于控制点的边界框
+            return super.getBounds();
+        }
+        
+        const stroke = Math.max(1, this.properties.strokeWidth || 1);
+        let minX = samplePoints[0].x;
+        let maxX = samplePoints[0].x;
+        let minY = samplePoints[0].y;
+        let maxY = samplePoints[0].y;
+        
+        for (const pt of samplePoints) {
+            minX = Math.min(minX, pt.x);
+            maxX = Math.max(maxX, pt.x);
+            minY = Math.min(minY, pt.y);
+            maxY = Math.max(maxY, pt.y);
+        }
+        
+        // 也包含控制点，确保控制多边形在边界框内
+        for (const pt of this.controlPoints) {
+            minX = Math.min(minX, pt.x);
+            maxX = Math.max(maxX, pt.x);
+            minY = Math.min(minY, pt.y);
+            maxY = Math.max(maxY, pt.y);
+        }
+        
+        const padding = Math.ceil(stroke / 2) + 4;
+        return {
+            x: minX - padding,
+            y: minY - padding,
+            width: (maxX - minX) + padding * 2,
+            height: (maxY - minY) + padding * 2
+        };
+    }
+
     getEffectiveKnots() {
         const needed = this.controlPoints.length + this.degree + 1;
         if (Array.isArray(this.knots) && this.knots.length >= needed) {
@@ -124,7 +221,7 @@ export class BSplineCurve extends CurveShapeBase {
     generateUniformKnots(pointCount, degree) {
         const knotCount = pointCount + degree + 1;
         const knots = [];
-        const segments = knotCount - 2 * degree;
+        const segments = Math.max(1, knotCount - 2 * degree); // 防止除零错误
         for (let i = 0; i < knotCount; i++) {
             if (i <= degree) {
                 knots.push(0);

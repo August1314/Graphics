@@ -52,7 +52,7 @@ export class BezierSurfaceAlgorithm extends BaseAlgorithm {
         }
 
         const strokeRGBA = this.parseColor(strokeColor);
-        const fillRGBA = this.parseColor(fillColor);
+        const fillRGBA = fillColor ? this.parseColor(fillColor) : null;
 
         if (mode === 'grid' || !fillColor) {
             // 仅绘制曲面网格线
@@ -66,7 +66,7 @@ export class BezierSurfaceAlgorithm extends BaseAlgorithm {
                     this.drawSegment(surfacePoints[i - 1][j], surfacePoints[i][j], strokeRGBA, renderer);
                 }
             }
-        } else if (mode === 'fill') {
+        } else if (mode === 'fill' && fillRGBA) {
             // 填充每个小四边形 -> 两个三角形
             for (let i = 0; i < stepsU; i++) {
                 for (let j = 0; j < stepsV; j++) {

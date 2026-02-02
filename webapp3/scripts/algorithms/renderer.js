@@ -11,7 +11,7 @@ export class PixelRenderer {
      */
     constructor(canvas, useDevicePixelRatio = false) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+        this.ctx = canvas.getContext('2d', { willReadFrequently: true });
         this.imageData = null;
         this.width = 0;
         this.height = 0;

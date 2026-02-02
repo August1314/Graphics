@@ -24,6 +24,28 @@ export class SelectTool extends BaseTool {
     onMouseDown(x, y, event) {
         if (!this.document) return;
 
+        // 先检查是否点击了控制点（优先于图形本身）
+        // 如果点击了控制点，发出事件让外部切换到对应工具
+        const controlPointHit = this.checkControlPointHit(x, y);
+        if (controlPointHit) {
+            this.emit('controlPointHit', {
+                shape: controlPointHit.shape,
+                index: controlPointHit.index,
+                shapeType: controlPointHit.shape.type,
+                x: x,
+                y: y
+            });
+            // 选中该图形
+            this.document.deselectAll();
+            this.document.selectShape(controlPointHit.shape);
+            this.selectedShape = controlPointHit.shape;
+            this.emit('shapeSelected', { 
+                shape: controlPointHit.shape,
+                properties: controlPointHit.shape.properties
+            });
+            return;
+        }
+
         const shape = this.document.findShapeAt(x, y);
         
         if (shape) {
@@ -65,6 +87,37 @@ export class SelectTool extends BaseTool {
         }
     }
 
+    // 检查是否点击了控制点
+    checkControlPointHit(x, y) {
+        if (!this.document) return null;
+        const tolerance = 10; // 控制点点击容差
+        
+        // 只检查已选中的图形，避免误判
+        const selectedShapes = this.document.getSelectedShapes();
+        // 从后往前检查（后绘制的图形在上层）
+        for (let i = selectedShapes.length - 1; i >= 0; i--) {
+            const shape = selectedShapes[i];
+            // 只检查支持控制点的图形类型
+            if (!this.isEditableShape(shape)) continue;
+            
+            // 检查是否有 hitTestControlPoint 方法
+            if (typeof shape.hitTestControlPoint === 'function') {
+                const result = shape.hitTestControlPoint(x, y, tolerance);
+                // 对于曲面，返回 {i, j} 对象；对于曲线，返回索引
+                if (result !== null && result !== -1 && result !== undefined) {
+                    return { shape, index: result };
+                }
+            }
+        }
+        return null;
+    }
+
+    // 判断图形是否支持控制点编辑
+    isEditableShape(shape) {
+        const editableTypes = ['bezier_curve', 'bspline_curve', 'bezier_surface'];
+        return editableTypes.includes(shape.type);
+    }
+
     onMouseMove(x, y, event) {
         if (this.boxSelecting) {
             // 更新选择框
@@ -92,6 +145,27 @@ export class SelectTool extends BaseTool {
         }
         
         this.emit('shapeMoving', { shapes: selectedShapes, dx, dy });
+    }
+
+    onDoubleClick(x, y, event) {
+        if (!this.document) return;
+        
+        // 双击图形时，如果图形支持编辑，切换到对应工具
+        const shape = this.document.findShapeAt(x, y);
+        if (shape && this.isEditableShape(shape)) {
+            this.document.deselectAll();
+            this.document.selectShape(shape);
+            this.selectedShape = shape;
+            this.emit('shapeSelected', { 
+                shape: shape,
+                properties: shape.properties
+            });
+            // 发出双击事件，让外部切换到对应工具
+            this.emit('shapeDoubleClicked', {
+                shape: shape,
+                shapeType: shape.type
+            });
+        }
     }
 
     onMouseUp(x, y, event) {

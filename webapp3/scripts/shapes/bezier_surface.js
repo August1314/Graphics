@@ -43,6 +43,19 @@ export class BezierSurface extends BaseShape {
         this.cacheValid = false;
     }
 
+    setFillColor(color) {
+        super.setFillColor(color);
+        this.cacheValid = false;
+    }
+
+    setMode(mode) {
+        this.mode = mode;
+        if (this.properties) {
+            this.properties.mode = mode;
+        }
+        this.cacheValid = false;
+    }
+
     getControlPoint(i, j) {
         if (i < 0 || i >= 4 || j < 0 || j >= 4) return null;
         return this.controlGrid[i][j];
@@ -66,6 +79,16 @@ export class BezierSurface extends BaseShape {
     }
 
     render(ctx) {
+        // 统一有效模式：显式为 fill 或者有非透明填充色时，强制按填充模式
+        const hasFill = this.properties.fillColor && this.properties.fillColor !== 'transparent';
+        const effectiveMode = (this.mode === 'fill' || hasFill) ? 'fill' : 'grid';
+        this.mode = effectiveMode;
+        if (this.properties) {
+            this.properties.mode = effectiveMode;
+        }
+        if (effectiveMode === 'fill' && (!this.properties.fillColor || this.properties.fillColor === 'transparent')) {
+            this.properties.fillColor = '#cccccc';
+        }
         try {
             if (this.useRasterization) {
                 this.renderWithAlgorithm(ctx);
@@ -107,15 +130,19 @@ export class BezierSurface extends BaseShape {
             row.map(p => ({ x: p.x - offsetX, y: p.y - offsetY }))
         );
 
+        const fillForAlgo = this.mode === 'fill'
+            ? (this.properties.fillColor && this.properties.fillColor !== 'transparent'
+                ? this.properties.fillColor
+                : '#cccccc')
+            : undefined;
+
         this.algorithm.execute({
             controlGrid: localGrid,
             stepsU: this.stepsU,
             stepsV: this.stepsV,
             mode: this.mode,
             strokeColor: this.properties.strokeColor,
-            fillColor: this.properties.fillColor && this.properties.fillColor !== 'transparent'
-                ? this.properties.fillColor
-                : null
+            fillColor: fillForAlgo
         }, renderer);
 
         renderer.endPixelMode();
@@ -124,8 +151,106 @@ export class BezierSurface extends BaseShape {
     }
 
     renderWithCanvas(ctx) {
-        // 简单版本：只画控制网格
-        this.renderControlGrid(ctx);
+        // 使用 Canvas 路径近似绘制曲面，可选填充
+        const stepsU = Math.max(1, this.stepsU);
+        const stepsV = Math.max(1, this.stepsV);
+        const strokeColor = this.properties.strokeColor || '#000000';
+        const fillColor = this.mode === 'fill'
+            ? (this.properties.fillColor && this.properties.fillColor !== 'transparent'
+                ? this.properties.fillColor
+                : '#cccccc')
+            : null;
+
+        // 预采样曲面点
+        const surfacePoints = [];
+        for (let i = 0; i <= stepsU; i++) {
+            const u = i / stepsU;
+            surfacePoints[i] = [];
+            for (let j = 0; j <= stepsV; j++) {
+                const v = j / stepsV;
+                surfacePoints[i][j] = this.evaluateSurfacePoint(u, v);
+            }
+        }
+
+        ctx.save();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = strokeColor;
+
+        if (this.mode === 'fill' && fillColor) {
+            ctx.fillStyle = fillColor;
+            // 两个三角形填充一个小面片
+            for (let i = 0; i < stepsU; i++) {
+                for (let j = 0; j < stepsV; j++) {
+                    const p00 = surfacePoints[i][j];
+                    const p10 = surfacePoints[i + 1][j];
+                    const p01 = surfacePoints[i][j + 1];
+                    const p11 = surfacePoints[i + 1][j + 1];
+
+                    // 三角形 p00-p10-p11
+                    ctx.beginPath();
+                    ctx.moveTo(p00.x, p00.y);
+                    ctx.lineTo(p10.x, p10.y);
+                    ctx.lineTo(p11.x, p11.y);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // 三角形 p00-p11-p01
+                    ctx.beginPath();
+                    ctx.moveTo(p00.x, p00.y);
+                    ctx.lineTo(p11.x, p11.y);
+                    ctx.lineTo(p01.x, p01.y);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+        }
+
+        // 勾勒网格线（fill 模式下也画，增加结构感）
+        for (let i = 0; i <= stepsU; i++) {
+            ctx.beginPath();
+            for (let j = 0; j <= stepsV; j++) {
+                const p = surfacePoints[i][j];
+                if (j === 0) ctx.moveTo(p.x, p.y);
+                else ctx.lineTo(p.x, p.y);
+            }
+            ctx.stroke();
+        }
+        for (let j = 0; j <= stepsV; j++) {
+            ctx.beginPath();
+            for (let i = 0; i <= stepsU; i++) {
+                const p = surfacePoints[i][j];
+                if (i === 0) ctx.moveTo(p.x, p.y);
+                else ctx.lineTo(p.x, p.y);
+            }
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    evaluateSurfacePoint(u, v) {
+        const Bu = this.bernstein3(u);
+        const Bv = this.bernstein3(v);
+        let x = 0;
+        let y = 0;
+        for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 4; j++) {
+                const b = Bu[i] * Bv[j];
+                x += b * this.controlGrid[i][j].x;
+                y += b * this.controlGrid[i][j].y;
+            }
+        }
+        return { x, y };
+    }
+
+    bernstein3(t) {
+        const it = 1 - t;
+        return [
+            it * it * it,
+            3 * t * it * it,
+            3 * t * t * it,
+            t * t * t
+        ];
     }
 
     renderControlGrid(ctx) {
@@ -249,9 +374,61 @@ export class BezierSurface extends BaseShape {
     }
 
     contains(x, y) {
-        const bounds = this.getBounds();
-        return x >= bounds.x && x <= bounds.x + bounds.width &&
-               y >= bounds.y && y <= bounds.y + bounds.height;
+        // 对于曲面，使用更精确的检测：只检查是否点击了控制点或控制网格线附近
+        // 这样可以避免因为边界框太大而误选
+        const tolerance = 15; // 控制网格线点击容差
+        
+        // 先检查是否点击了控制点
+        const controlHit = this.hitTestControlPoint(x, y, tolerance);
+        if (controlHit) {
+            return true;
+        }
+        
+        // 检查是否点击了控制网格线附近
+        for (let i = 0; i < 4; i++) {
+            // 检查行（水平线）
+            for (let j = 0; j < 3; j++) {
+                const p1 = this.controlGrid[i][j];
+                const p2 = this.controlGrid[i][j + 1];
+                if (this.pointNearLine(x, y, p1.x, p1.y, p2.x, p2.y, tolerance)) {
+                    return true;
+                }
+            }
+            // 检查列（垂直线）
+            if (i < 3) {
+                for (let j = 0; j < 4; j++) {
+                    const p1 = this.controlGrid[i][j];
+                    const p2 = this.controlGrid[i + 1][j];
+                    if (this.pointNearLine(x, y, p1.x, p1.y, p2.x, p2.y, tolerance)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        // 如果都没有命中，返回 false（不选中）
+        return false;
+    }
+    
+    // 检查点是否在直线附近
+    pointNearLine(px, py, x1, y1, x2, y2, tolerance) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const lengthSq = dx * dx + dy * dy;
+        
+        if (lengthSq === 0) {
+            // 线段退化为点
+            const distSq = (px - x1) * (px - x1) + (py - y1) * (py - y1);
+            return distSq <= tolerance * tolerance;
+        }
+        
+        // 计算点到线段的最近距离
+        const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lengthSq));
+        const projX = x1 + t * dx;
+        const projY = y1 + t * dy;
+        const distSq = (px - projX) * (px - projX) + (py - projY) * (py - projY);
+        
+        return distSq <= tolerance * tolerance;
     }
 
     toDict() {
